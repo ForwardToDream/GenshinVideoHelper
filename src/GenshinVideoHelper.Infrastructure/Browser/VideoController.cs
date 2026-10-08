@@ -1,9 +1,12 @@
 using System.Reflection;
 using System.Text.Json;
 
-namespace GenshinVideoHelper.Core.Browser;
+using GenshinVideoHelper.Core.Models;
+using GenshinVideoHelper.Core.Contracts;
 
-public sealed class VideoController
+namespace GenshinVideoHelper.Infrastructure.Browser;
+
+public sealed class VideoController : IVideoPlayer
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string Script = LoadScript();
@@ -37,10 +40,8 @@ public sealed class VideoController
     private static string LoadScript()
     {
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(
-            "GenshinVideoHelper.Core.Browser.VideoControl.js")!;
+            "GenshinVideoHelper.Infrastructure.Browser.VideoControl.js")!;
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
     }
 }
-
-public sealed class VideoNotReadyException(string message) : InvalidOperationException(message);

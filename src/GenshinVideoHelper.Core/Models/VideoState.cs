@@ -1,4 +1,4 @@
-namespace GenshinVideoHelper.Core.Browser;
+namespace GenshinVideoHelper.Core.Models;
 
 public sealed record VideoState(
     string Title,

@@ -1,4 +1,6 @@
-namespace GenshinVideoHelper.Core.Browser;
+using GenshinVideoHelper.Core.Models;
+
+namespace GenshinVideoHelper.Core.Application;
 
 public sealed record FollowRequest(long Version, string TargetId, VideoIdentity Identity, CancellationToken Token);
 

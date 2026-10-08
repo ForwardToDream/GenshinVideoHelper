@@ -1,13 +1,12 @@
 using System.Windows;
 using System.Windows.Controls;
-using GenshinVideoHelper.Core.Browser;
+using GenshinVideoHelper.Core.Models;
 using GenshinVideoHelper.Core.Library;
 
 namespace GenshinVideoHelper.App;
 
 public partial class MainWindow
 {
-    private readonly VideoLibraryCatalog _libraryCatalog;
     private VideoLibrary? _activeLibrary;
     private bool _updatingLibraryControls;
 
@@ -89,4 +88,3 @@ public partial class MainWindow
         if (picker.ShowDialog() == true) SelectLibrary(picker.SelectedLibrary);
     }
 }
-

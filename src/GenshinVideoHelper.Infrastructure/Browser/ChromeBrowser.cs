@@ -2,9 +2,12 @@ using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace GenshinVideoHelper.Core.Browser;
+using GenshinVideoHelper.Core.Models;
+using GenshinVideoHelper.Core.Contracts;
 
-public sealed class ChromeBrowser : IDisposable
+namespace GenshinVideoHelper.Infrastructure.Browser;
+
+public sealed class ChromeBrowser : IBrowserSession, IDisposable
 {
     private readonly string _profileDirectory;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(2) };
@@ -78,7 +81,7 @@ public sealed class ChromeBrowser : IDisposable
             if (page is not null) return page;
             await Task.Delay(100, token);
         }
-        throw new TimeoutException("视频页面打开超时，请在其他视频页面区域刷新。");
+        throw new TimeoutException("视频页面打开超时，请重新开始跟随。");
     }
 
     public async Task NavigateAsync(BrowserPage page, VideoIdentity identity, CancellationToken token = default)
@@ -152,20 +155,8 @@ public sealed class ChromeBrowser : IDisposable
         }
     }
 
-    public static bool IsBilibiliUrl(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var url) &&
-        url.Scheme == Uri.UriSchemeHttps &&
-        (url.Host.Equals("bilibili.com", StringComparison.OrdinalIgnoreCase) ||
-         url.Host.EndsWith(".bilibili.com", StringComparison.OrdinalIgnoreCase));
-
-    public static Uri ValidateVideoUrl(string value)
-    {
-        value = value.Trim();
-        if (value.StartsWith("BV", StringComparison.OrdinalIgnoreCase))
-            value = "https://www.bilibili.com/video/" + value;
-        if (!IsBilibiliUrl(value))
-            throw new ArgumentException("请输入完整的 https://www.bilibili.com 视频链接或 BV 号。");
-        return new Uri(value);
-    }
+    public static bool IsBilibiliUrl(string? value) => BilibiliUrl.IsBilibili(value);
+    public static Uri ValidateVideoUrl(string? value) => BilibiliUrl.Validate(value);
 
     private static string? FindChrome()
     {

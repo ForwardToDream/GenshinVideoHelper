@@ -15,7 +15,7 @@
     <Using Remove="System.Drawing" />
     <Resource Include="Resources/AppIcon.ico" />
     <Resource Include="Resources/AppIcon.png" />
-    <ProjectReference Include="../GenshinVideoHelper.Core/GenshinVideoHelper.Core.csproj" />
+    <ProjectReference Include="../GenshinVideoHelper.Infrastructure/GenshinVideoHelper.Infrastructure.csproj" />
     <Content Include="../../README.md" Link="README.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

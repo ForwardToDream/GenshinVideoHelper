@@ -25,7 +25,7 @@ Windows 原神 B站攻略跟随助手：分集选择、Chrome 画中画和全局
 
 ## 开发
 
-需要 .NET SDK 8+。
+需要 .NET SDK 8+。Core 管应用流程与契约，Infrastructure 管浏览器、网络与存储，App 管界面与 Windows 功能；测试按层分开。
 
 ```powershell
 dotnet build GenshinVideoHelper.sln -c Release
@@ -33,6 +33,6 @@ dotnet build GenshinVideoHelper.sln -c Release
 .\scripts\publish.ps1
 ```
 
-发布目录：`artifacts/GenshinVideoHelper`。专项测试参数：`-Preview -Browser -Pip -Follow -Lifecycle -RenderUi`；浏览器测试需要 FFmpeg。
+发布目录：`artifacts/GenshinVideoHelper`。专项测试参数：`-Preview -Browser -Pip -Follow -Lifecycle -RenderUi -Latency`；本地浏览器专项需要 FFmpeg。`-Latency` 需要 Chrome 和联网， 单独记录启动、画中画与退出各阶段耗时至 `artifacts/latency`，超出体验阈值时提示警告。
 
 参考：[PCL](https://github.com/Meloong-Git/PCL)（龙腾猫跃，视觉） · [BGI](https://github.com/babalae/better-genshin-impact)（babalae，技术与组织）。

@@ -1,7 +1,10 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 
-namespace GenshinVideoHelper.Core.Browser;
+using GenshinVideoHelper.Core.Models;
+using GenshinVideoHelper.Core.Contracts;
+
+namespace GenshinVideoHelper.Infrastructure.Browser;
 
 /// <summary>A bounded, single-request CDP connection. Events may precede the reply.</summary>
 public sealed class CdpClient

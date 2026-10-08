@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../GenshinVideoHelper.Core/GenshinVideoHelper.Core.csproj" />
+    <EmbeddedResource Include="Browser/VideoControl.js" />
+    <EmbeddedResource Include="Library/Data/*.json" LogicalName="GenshinVideoHelper.VideoLibraries.%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>
