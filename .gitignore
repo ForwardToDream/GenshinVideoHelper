@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+.vscode/
+artifacts/
+*.user
+*.suo
+node_modules/
+reference/
+**/AGENTS.md
+
+GenshinVideoHelper.settings.json
+GenshinVideoHelper.settings.json.*
+GenshinVideoHelper.sln

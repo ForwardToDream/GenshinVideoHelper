@@ -1,0 +1,11 @@
+<DrawingImage xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+ <DrawingImage.Drawing><DrawingGroup>
+  <GeometryDrawing Geometry="M56,0 H200 Q256,0 256,56 V200 Q256,256 200,256 H56 Q0,256 0,200 V56 Q0,0 56,0 Z">
+   <GeometryDrawing.Brush><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#489FFF" Offset="0"/><GradientStop Color="#0960DB" Offset="1"/></LinearGradientBrush></GeometryDrawing.Brush>
+  </GeometryDrawing>
+  <GeometryDrawing Brush="White" Geometry="M66,30 L75,55 L100,64 L75,73 L66,98 L57,73 L32,64 L57,55 Z"/>
+  <GeometryDrawing Brush="White" Geometry="M110,72 L185,119 Q199,128 185,137 L110,182 Q98,190 98,174 V80 Q98,64 110,72 Z"/>
+  <GeometryDrawing Brush="#125DD1"><GeometryDrawing.Pen><Pen Brush="White" Thickness="7"/></GeometryDrawing.Pen><GeometryDrawing.Geometry><RectangleGeometry Rect="153,180,72,49" RadiusX="10" RadiusY="10"/></GeometryDrawing.Geometry></GeometryDrawing>
+  <GeometryDrawing Brush="White"><GeometryDrawing.Geometry><RectangleGeometry Rect="190,205,23,14" RadiusX="3" RadiusY="3"/></GeometryDrawing.Geometry></GeometryDrawing>
+ </DrawingGroup></DrawingImage.Drawing>
+</DrawingImage>

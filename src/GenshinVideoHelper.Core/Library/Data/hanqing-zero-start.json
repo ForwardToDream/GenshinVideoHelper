@@ -1,0 +1,31 @@
+{
+  "Id": "hanqing-zero-start",
+  "Name": "每张地图完全从零开始",
+  "CreatorName": "汉卿导航",
+  "CreatorUrl": "https://space.bilibili.com/3546597013064142/",
+  "Description": "每张地图独立从零开始的一条龙攻略，可按地区选择对应的合集视频。",
+  "Videos": [
+    { "Number": 1, "Title": "蒙德、璃月、龙脊雪山", "Bvid": "BV1MXfEY4EQ2" },
+    { "Number": 2, "Title": "稻妻", "Bvid": "BV1zTjAzAETy" },
+    { "Number": 3, "Title": "渊下宫", "Bvid": "BV1y2gfzHE2M" },
+    { "Number": 4, "Title": "层岩巨渊", "Bvid": "BV1uGuBzwE3n" },
+    { "Number": 5, "Title": "须弥·雨林", "Bvid": "BV1STtJz4EMc" },
+    { "Number": 6, "Title": "须弥·沙漠·其之一", "Bvid": "BV1fKntzyEjv" },
+    { "Number": 7, "Title": "须弥·沙漠·其之二", "Bvid": "BV1AvWdzgEG8" },
+    { "Number": 8, "Title": "须弥·佑灵砾漠", "Bvid": "BV1ExCjBQEcX" },
+    { "Number": 9, "Title": "枫丹·其之一", "Bvid": "BV1krUDBTEyx" },
+    { "Number": 10, "Title": "枫丹·其之二", "Bvid": "BV1SkqaBeEHf" },
+    { "Number": 11, "Title": "枫丹·其之三", "Bvid": "BV1KUBLBJEsq" },
+    { "Number": 12, "Title": "沉玉谷", "Bvid": "BV18Li3BBEPU" },
+    { "Number": 13, "Title": "诺思托伊区、旧日之海", "Bvid": "BV1yJi8BmEk5" },
+    { "Number": 14, "Title": "纳塔·其之一", "Bvid": "BV1HU62BqEfW" },
+    { "Number": 15, "Title": "纳塔·其之二", "Bvid": "BV1hRznBCEfH" },
+    { "Number": 16, "Title": "纳塔·圣山残辉", "Bvid": "BV18L6PBFEsE" },
+    { "Number": 17, "Title": "纳塔·悠悠度假村", "Bvid": "BV15aFQzpEhW" },
+    { "Number": 18, "Title": "挪德卡莱·其一", "Bvid": "BV1E9duBYEBV" },
+    { "Number": 19, "Title": "挪德卡莱·其二", "Bvid": "BV1KL5Y6GEFa" },
+    { "Number": 20, "Title": "蒙德月之六", "Bvid": "BV1TT7S6YETR" },
+    { "Number": 21, "Title": "霜月月之八", "Bvid": "BV1CATe69EKH" },
+    { "Number": 22, "Title": "至冬·其之一", "Bvid": "BV1hCuC6NE47" }
+  ]
+}

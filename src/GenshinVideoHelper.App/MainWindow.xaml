@@ -1,0 +1,172 @@
+<Window x:Class="GenshinVideoHelper.App.MainWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+ Icon="Resources/AppIcon.ico" Title="GenshinVideoHelper · 视频跟随助手" Width="1020" Height="730" MinWidth="860" MinHeight="600"
+ Background="{StaticResource PageBrush}" Foreground="{StaticResource TextBrush}" FontFamily="Microsoft YaHei UI" WindowStartupLocation="CenterScreen"
+ WindowStyle="None" ResizeMode="CanResize" UseLayoutRounding="True" SnapsToDevicePixels="True">
+ <shell:WindowChrome.WindowChrome>
+  <shell:WindowChrome CaptionHeight="48" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="6" UseAeroCaptionButtons="False" />
+ </shell:WindowChrome.WindowChrome>
+ <Border Background="{StaticResource PageBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="6">
+  <Grid>
+   <Grid.RowDefinitions><RowDefinition Height="48" /><RowDefinition Height="*" /><RowDefinition Height="34" /></Grid.RowDefinitions>
+   <Border Background="{StaticResource TitleBarBrush}" CornerRadius="5,5,0,0">
+    <Grid>
+     <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
+      <Image Source="Resources/AppIcon.png" Width="24" Height="24" Margin="0,0,10,0" />
+      <TextBlock Text="GenshinVideoHelper" Foreground="White" FontSize="17" FontWeight="SemiBold" />
+      <TextBlock Text="原神视频跟随" Foreground="#DFEEFF" FontSize="12" Margin="14,2,0,0" VerticalAlignment="Center" />
+     </StackPanel>
+     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,6,0" VerticalAlignment="Center">
+      <TextBlock x:Name="HeaderConnectionState" Text="等待开始" Foreground="#DFEEFF" FontSize="12" VerticalAlignment="Center" Margin="0,0,18,0" />
+      <Button Style="{StaticResource CaptionButton}" Click="Minimize_Click" ToolTip="最小化到系统托盘" AutomationProperties.Name="最小化" shell:WindowChrome.IsHitTestVisibleInChrome="True"><TextBlock Style="{StaticResource Symbol}" Text="&#xE921;" Foreground="White" FontSize="12" /></Button>
+      <Button Style="{StaticResource CaptionButton}" Click="Maximize_Click" ToolTip="最大化 / 还原" AutomationProperties.Name="最大化或还原" shell:WindowChrome.IsHitTestVisibleInChrome="True"><TextBlock Style="{StaticResource Symbol}" Text="&#xE922;" Foreground="White" FontSize="12" /></Button>
+      <Button Style="{StaticResource CaptionButton}" Click="Close_Click" ToolTip="退出并关闭浏览器与画中画" AutomationProperties.Name="关闭工具" shell:WindowChrome.IsHitTestVisibleInChrome="True"><TextBlock Style="{StaticResource Symbol}" Text="&#xE8BB;" Foreground="White" FontSize="12" /></Button>
+     </StackPanel>
+    </Grid>
+   </Border>
+   <Grid Grid.Row="1">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+    <Border Background="{StaticResource SidebarBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
+     <Grid><Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+      <StackPanel Margin="0,16,0,0">
+       <TextBlock Text="视频跟随" Style="{StaticResource SecondaryText}" Margin="20,0,0,9" />
+       <RadioButton x:Name="NavFollow" Style="{StaticResource NavItem}" GroupName="Navigation" Tag="Follow" IsChecked="True" Checked="Navigation_Checked"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Symbol}" Text="&#xE768;" Margin="0,0,13,0" /><TextBlock Text="启动" VerticalAlignment="Center" /></StackPanel></RadioButton>
+       <RadioButton x:Name="NavHotkeys" Style="{StaticResource NavItem}" GroupName="Navigation" Tag="Hotkeys" Checked="Navigation_Checked"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Symbol}" Text="&#xE765;" Margin="0,0,13,0" /><TextBlock Text="快捷键" VerticalAlignment="Center" /></StackPanel></RadioButton>
+       <RadioButton x:Name="NavSettings" Style="{StaticResource NavItem}" GroupName="Navigation" Tag="Settings" Checked="Navigation_Checked"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Symbol}" Text="&#xE713;" Margin="0,0,13,0" /><TextBlock Text="设置" VerticalAlignment="Center" /></StackPanel></RadioButton>
+      </StackPanel>
+     </Grid>
+    </Border>
+    <Grid Grid.Column="1">
+     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition /></Grid.RowDefinitions>
+     <StackPanel Margin="24,20,24,18"><TextBlock x:Name="PageHeading" Text="启动" Style="{StaticResource PageTitle}" /><TextBlock x:Name="PageDescription" Text="选择攻略，自动播放并进入左下角画中画。" Style="{StaticResource SecondaryText}" /></StackPanel>
+     <Grid x:Name="PagesHost" Grid.Row="1">
+      <ScrollViewer x:Name="FollowPage" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+       <StackPanel Margin="24,0,24,20">
+        <Border Style="{StaticResource Card}"><StackPanel>
+         <Grid Margin="0,0,0,12">
+          <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+          <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <TextBlock x:Name="GuideCardTitle" Text="攻略选择" Style="{StaticResource CardTitle}" Margin="0" VerticalAlignment="Center" />
+          <Button x:Name="ChangeLibraryButton" Grid.Column="1" Content="更换库" Style="{StaticResource SubtleButton}" Padding="12,4" MinHeight="28" Click="ChangeLibrary_Click" Margin="12,0,0,0" />
+          <Grid Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,0">
+           <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+           <TextBlock x:Name="LibrarySummaryText" Style="{StaticResource SecondaryText}" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
+           <TextBlock x:Name="LibraryVideoCountText" Grid.Column="1" Style="{StaticResource SecondaryText}" VerticalAlignment="Center" Margin="12,0,0,0" />
+          </Grid>
+         </Grid>
+         <ComboBox x:Name="GuideVideoSelector" SelectionChanged="GuideVideoSelector_SelectionChanged" Margin="0,0,0,8" ToolTip="从库中选择地图攻略，也可在下面自行输入链接" AutomationProperties.Name="地图攻略视频">
+          <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding DisplayText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DisplayText}" /></DataTemplate></ComboBox.ItemTemplate>
+         </ComboBox>
+         <TextBox x:Name="UrlInput" Height="36" KeyDown="UrlInput_KeyDown" TextChanged="UrlInput_TextChanged" ToolTip="直接清空或改写链接即可自行输入；支持 BV 号和 ?p=3，自动读取分集" />
+         <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <ComboBox x:Name="EpisodeSelector" MinWidth="100" IsEnabled="False" SelectionChanged="EpisodeSelector_SelectionChanged" ToolTip="开始前可预选分 P；跟随当前视频时直接切换分集"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding DisplayText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DisplayText}" /></DataTemplate></ComboBox.ItemTemplate></ComboBox>
+          <Button x:Name="PreviousEpisodeButton" Grid.Column="1" Content="上一集" Margin="10,0,0,0" IsEnabled="False" Click="PreviousEpisode_Click" />
+          <Button x:Name="NextEpisodeButton" Grid.Column="2" Content="下一集" Margin="8,0,0,0" IsEnabled="False" Click="NextEpisode_Click" />
+         </Grid>
+         <Button x:Name="OpenButton" Content="开始跟随" Style="{StaticResource PrimaryButton}" MinHeight="40" HorizontalAlignment="Stretch" Margin="0,12,0,0" Click="OpenVideo_Click" />
+         <Grid><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <TextBlock x:Name="EpisodeStatusText" Margin="0,8,0,0" VerticalAlignment="Center">
+           <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource SecondaryText}">
+            <Style.Triggers><Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed" /></Trigger></Style.Triggers>
+           </Style></TextBlock.Style>
+          </TextBlock>
+          <Button x:Name="EpisodeRetryButton" Grid.Column="1" Content="重试分集" Padding="10,4" MinHeight="28" VerticalAlignment="Center" Margin="12,8,0,0" Visibility="Collapsed" Click="EpisodeRetry_Click" />
+         </Grid>
+        </StackPanel></Border>
+        <Border Style="{StaticResource Card}"><StackPanel>
+         <Grid Margin="0,0,0,11"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <TextBlock Text="播放控制" Style="{StaticResource CardTitle}" Margin="0" />
+          <Border Grid.Column="1" Background="{StaticResource HoverBrush}" CornerRadius="3" Padding="10,4"><TextBlock x:Name="PlaybackLabel" Text="未连接" Foreground="{StaticResource AccentBrush}" FontSize="12" /></Border>
+         </Grid>
+         <TextBlock x:Name="VideoTitle" Text="等待开始跟随" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
+         <TextBlock x:Name="TimeLabel" Text="--:-- / --:--" FontSize="27" Foreground="{StaticResource AccentBrush}" Margin="0,8,0,8" />
+         <Grid><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+          <Button x:Name="BackButton" Content="后退 5 秒" Click="Backward_Click" Margin="0,0,6,0" ToolTip="Alt + 1" />
+          <Button x:Name="PlayButton" Grid.Column="1" Content="播放 / 暂停" Style="{StaticResource PrimaryButton}" Click="Toggle_Click" Margin="6,0" ToolTip="Alt + 2" />
+          <Button x:Name="ForwardButton" Grid.Column="2" Content="前进 5 秒" Click="Forward_Click" Margin="6,0,0,0" ToolTip="Alt + 3" />
+         </Grid>
+         <TextBlock x:Name="PlaybackPreferenceText" Text="跳转步长 5 秒 · 播放速度 1×" Style="{StaticResource SecondaryText}" Margin="0,11,0,0" />
+         <Separator Margin="0,12,0,12" />
+         <Grid><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <TextBlock x:Name="PipStateText" Text="就绪后自动开启浮窗" Style="{StaticResource SecondaryText}" VerticalAlignment="Center" Margin="0,0,12,0" />
+          <StackPanel Grid.Column="1" Orientation="Horizontal">
+           <Button x:Name="PipButton" Content="开启画中画" Padding="12,6" MinHeight="30" Click="Pip_Click" />
+           <Button Content="放回左下角" Padding="12,6" MinHeight="30" Margin="8,0,0,0" Click="PlacePip_Click" />
+           <Button x:Name="MuteButton" Content="静音" Style="{StaticResource SubtleButton}" Padding="12,6" MinHeight="30" Margin="8,0,0,0" Click="Mute_Click" />
+          </StackPanel>
+         </Grid>
+         <Button x:Name="FollowRetryButton" Content="重试自动跟随" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" Margin="0,13,0,0" Visibility="Collapsed" Click="FollowRetry_Click" />
+        </StackPanel></Border>
+        <TextBlock Text="保留 Chrome 视频页面。推荐游戏使用无边框窗口，最小化工具后快捷键继续生效。" Style="{StaticResource SecondaryText}" Margin="3,0,3,0" />
+       </StackPanel>
+      </ScrollViewer>
+      <ScrollViewer x:Name="SettingsPage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+       <StackPanel Margin="24,0,24,20">
+        <Border Style="{StaticResource Card}"><StackPanel>
+         <TextBlock Text="播放与浮窗" Style="{StaticResource CardTitle}" />
+         <Grid><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="130" /></Grid.ColumnDefinitions>
+          <StackPanel Margin="0,0,15,0"><TextBlock Text="前进 / 后退步长" Margin="0,0,0,5" /><TextBlock Text="按钮与前进 / 后退快捷键共用此步长。" Style="{StaticResource SecondaryText}" /></StackPanel>
+          <ComboBox x:Name="SeekSelector" Grid.Column="1" VerticalAlignment="Center" SelectionChanged="Seek_Changed"><ComboBoxItem Content="5 秒" Tag="5" /><ComboBoxItem Content="10 秒" Tag="10" /><ComboBoxItem Content="15 秒" Tag="15" /></ComboBox>
+         </Grid>
+         <Separator Margin="0,18,0,18" />
+         <Grid><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="130" /></Grid.ColumnDefinitions>
+          <StackPanel Margin="0,0,15,0"><TextBlock Text="播放速度" Margin="0,0,0,5" /><TextBlock Text="作用于当前连接的视频。" Style="{StaticResource SecondaryText}" /></StackPanel>
+          <ComboBox x:Name="RateSelector" Grid.Column="1" VerticalAlignment="Center" SelectionChanged="Rate_Changed"><ComboBoxItem Content="0.75×" Tag="0.75" /><ComboBoxItem Content="1×" Tag="1" /><ComboBoxItem Content="1.25×" Tag="1.25" /><ComboBoxItem Content="1.5×" Tag="1.5" /><ComboBoxItem Content="2×" Tag="2" /></ComboBox>
+         </Grid>
+         <Separator Margin="0,18,0,18" />
+         <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="90" /><ColumnDefinition /><ColumnDefinition Width="65" /></Grid.ColumnDefinitions>
+          <TextBlock Text="浮窗宽度" VerticalAlignment="Center" />
+          <Slider x:Name="PipWidthSlider" Grid.Column="1" Minimum="280" Maximum="800" TickFrequency="20" IsSnapToTickEnabled="True" Margin="12,0,15,0" VerticalAlignment="Center" ValueChanged="PipWidth_Changed" />
+          <TextBlock x:Name="PipWidthLabel" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="{StaticResource AccentBrush}" />
+         </Grid>
+         <TextBlock Text="按视频比例调整高度。改宽度后点击启动页“放回左下角”应用；下次自动开启也会使用新宽度。" Style="{StaticResource SecondaryText}" Margin="0,11,0,0" />
+        </StackPanel></Border>
+        <StackPanel Margin="3,0,3,0">
+         <TextBlock x:Name="ConfigPathText" Style="{StaticResource SecondaryText}" Margin="0,0,0,10" />
+         <WrapPanel><Button Content="使用说明" Click="OpenReadme_Click" Padding="12,6" MinHeight="30" Margin="0,0,8,9" /><Button Content="PCL 源仓库" Tag="https://github.com/Meloong-Git/PCL" Click="OpenLink_Click" Padding="12,6" MinHeight="30" Margin="0,0,8,9" /><Button Content="BGI 源仓库" Tag="https://github.com/babalae/better-genshin-impact" Click="OpenLink_Click" Padding="12,6" MinHeight="30" Margin="0,0,8,9" /></WrapPanel>
+         <TextBlock Text="视觉参考：Plain Craft Launcher · 龙腾猫跃。技术与组织参考：Better Genshin Impact · babalae 及贡献者。" Style="{StaticResource SecondaryText}" />
+         <TextBlock Text="本软件独立开发，与参考项目官方无关联。小地图识别尚未接入。" Style="{StaticResource SecondaryText}" Margin="0,5,0,0" />
+        </StackPanel>
+       </StackPanel>
+      </ScrollViewer>
+      <Grid x:Name="HotkeysPage" Visibility="Collapsed">
+       <Grid.RowDefinitions><RowDefinition /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+       <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+       <StackPanel Margin="24,0,24,20">
+        <Border Style="{StaticResource Card}"><StackPanel>
+         <TextBlock Text="全局快捷键" Style="{StaticResource CardTitle}" />
+         <CheckBox x:Name="HotkeysCheckbox" Content="启用全局快捷键" Click="Hotkeys_Click" />
+         <TextBlock x:Name="HotkeyStatus" Text="启动后注册快捷键" Foreground="{StaticResource AccentBrush}" TextWrapping="Wrap" Margin="0,11,0,0" />
+         <TextBlock Text="修改组合键后点击“保存绑定”。支持 Ctrl、Alt、Shift、Win 加字母、数字、方向键或 F1–F24；点击“录入”可直接按键，Esc 取消。反转项支持单键（~ / 反引号键等），按住生效、松开恢复。编辑期间暂时停用全局快捷键。" Style="{StaticResource SecondaryText}" Margin="0,12,0,16" />
+         <ItemsControl x:Name="HotkeyRows"><ItemsControl.ItemTemplate><DataTemplate>
+          <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="180" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+           <StackPanel Margin="0,0,15,0"><TextBlock Text="{Binding Title}" /><TextBlock Text="{Binding Description}" Style="{StaticResource SecondaryText}" FontSize="11" /></StackPanel>
+           <TextBox Grid.Column="1" Text="{Binding Keys, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" AutomationProperties.Name="{Binding Title}" GotKeyboardFocus="Binding_GotKeyboardFocus" LostKeyboardFocus="Binding_LostKeyboardFocus" PreviewKeyDown="Binding_PreviewKeyDown" ToolTip="例如 Alt+Left 或 Ctrl+Shift+F8" />
+           <Button Grid.Column="2" Content="录入" Margin="8,0,0,0" Padding="10,6" VerticalAlignment="Center" Click="CaptureBinding_Click" />
+          </Grid>
+         </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+        </StackPanel></Border>
+       </StackPanel>
+       </ScrollViewer>
+       <Border Grid.Row="1" Style="{StaticResource Card}" Margin="24,0,24,20" Padding="18,12"><StackPanel>
+        <WrapPanel><Button Content="保存绑定" Style="{StaticResource PrimaryButton}" Click="SaveBindings_Click" Margin="0,0,10,0" /><Button Content="填入默认绑定" Click="ResetBindings_Click" /></WrapPanel>
+        <TextBlock x:Name="BindingStatus" Text="录入或填写组合键，保存后立即生效并写入根目录配置。" Style="{StaticResource SecondaryText}" Margin="0,8,0,0" />
+       </StackPanel></Border>
+      </Grid>
+     </Grid>
+    </Grid>
+   </Grid>
+   <Border Grid.Row="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Background="White" CornerRadius="0,0,5,5">
+    <Grid Margin="16,0"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+     <TextBlock x:Name="StatusText" Text="粘贴攻略链接，点击开始跟随。" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
+     <TextBlock Grid.Column="1" Text="基础版" Foreground="{StaticResource SecondaryTextBrush}" FontSize="11" VerticalAlignment="Center" Margin="18,0,0,0" />
+    </Grid>
+   </Border>
+  </Grid>
+ </Border>
+</Window>
+
+
+
