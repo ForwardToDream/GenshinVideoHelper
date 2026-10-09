@@ -3,6 +3,7 @@ namespace GenshinVideoHelper.Infrastructure.Settings;
 public static class ApplicationPaths
 {
     public static string DataDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GenshinVideoHelper");
+    public static string LogDirectory => Path.Combine(DataDirectory, "logs");
     public static string SettingsPath => Path.Combine(FindApplicationRoot(AppContext.BaseDirectory), "GenshinVideoHelper.settings.json");
 
     public static string FindApplicationRoot(string startDirectory)

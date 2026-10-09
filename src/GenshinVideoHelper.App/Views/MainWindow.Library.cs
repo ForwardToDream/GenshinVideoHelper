@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using GenshinVideoHelper.Core.Models;
 using GenshinVideoHelper.Core.Library;
+using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.App;
 
@@ -43,6 +44,7 @@ public partial class MainWindow
         var previous = _settings.SelectedVideoLibraryId;
         _settings.SelectedVideoLibraryId = library?.Id;
         if (!SaveSettings()) { _settings.SelectedVideoLibraryId = previous; return false; }
+        AppLog.Info("App", $"用户选择视频库 {library?.Id ?? "手动输入"}。");
         _updatingLibraryControls = true;
         try
         {

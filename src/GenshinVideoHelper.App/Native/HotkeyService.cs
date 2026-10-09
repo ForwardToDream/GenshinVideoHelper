@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using GenshinVideoHelper.Core.Settings;
+using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.App.Native;
 
@@ -37,15 +38,18 @@ public sealed class HotkeyService : IDisposable
             {
                 var error = Marshal.GetLastWin32Error();
                 conflicts.Add($"{HotkeyBindings.Title(action)} {text}（{new Win32Exception(error).Message}）");
+                AppLog.Warn("Hotkey", $"{action} {text} 注册失败，错误码 {error}。");
                 continue;
             }
             _registered.Add(id);
         }
+        AppLog.Info("Hotkey", $"已注册 {_registered.Count} 项全局快捷键，{conflicts.Count} 项被占用。");
         return conflicts;
     }
 
     public void Disable()
     {
+        if (_registered.Count > 0) AppLog.Info("Hotkey", $"注销 {_registered.Count} 项全局快捷键。");
         foreach (var id in _registered) UnregisterHotKey(_source.Handle, id);
         _registered.Clear();
     }

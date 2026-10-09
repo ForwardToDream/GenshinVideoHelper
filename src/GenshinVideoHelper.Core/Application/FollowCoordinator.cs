@@ -1,4 +1,5 @@
 using GenshinVideoHelper.Core.Contracts;
+using GenshinVideoHelper.Core.Diagnostics;
 using GenshinVideoHelper.Core.Models;
 
 namespace GenshinVideoHelper.Core.Application;
@@ -96,6 +97,7 @@ public sealed class FollowCoordinator : IDisposable
         _began = _clock.GetUtcNow();
         _navigatingVersion = 0;
         _lastQuietError = null;
+        AppLog.Info("Follow", $"请求 #{request.Version}：{identity.Bvid} P{identity.Part}，目标页 {(page is null ? "新建" : page.Id)}。");
         var info = _cache.Get(identity) ?? (Current.Info?.Bvid == identity.Bvid ? Current.Info with { CurrentPart = identity.Part } : null);
         Publish(new(request, page, null, info, phase, true, false, "正在准备跟随，视频就绪后自动播放并开启画中画。", false));
         return request;
@@ -113,7 +115,11 @@ public sealed class FollowCoordinator : IDisposable
             Publish(Current with { Info = info });
         }
         catch (OperationCanceledException) when (request.Token.IsCancellationRequested) { }
-        catch (Exception ex) { if (IsCurrent(request) && version == _metadataVersion) Message($"分集读取失败：{ex.Message}", true); }
+        catch (Exception ex)
+        {
+            AppLog.Warn("Follow", $"分集读取失败：{request.Identity.Bvid}", ex);
+            if (IsCurrent(request) && version == _metadataVersion) Message($"分集读取失败：{ex.Message}", true);
+        }
     }
 
     private async Task<BrowserPage> GetPageAsync(FollowRequest request)
@@ -184,6 +190,7 @@ public sealed class FollowCoordinator : IDisposable
                 catch (Exception ex)
                 {
                     if (!IsCurrent(request)) return;
+                    AppLog.Warn("Follow", $"自动跟随未完成（请求 #{request.Version}）。", ex);
                     Session.Complete(request);
                     Publish(Current with { Phase = FollowPhase.Failed, CanRetry = true, Message = $"自动跟随未完成：{ex.Message}。可点击重试自动跟随。", IsError = true });
                 }
@@ -196,6 +203,7 @@ public sealed class FollowCoordinator : IDisposable
     private async Task ExecuteCoreAsync(VideoCommand command)
     {
         var request = Session.Current;
+        AppLog.Info("Follow", $"命令 {command.Action}。");
         if (command.Action is "toggle" or "pip")
         {
             Session.Suppress();
@@ -258,6 +266,7 @@ public sealed class FollowCoordinator : IDisposable
             if (_stopped || request is not null && !IsCurrent(request)) return;
             if (!quiet)
             {
+                AppLog.Warn("Follow", $"操作失败：{ex.Message}", ex);
                 if (request is not null) Session.Complete(request);
                 Publish(Current with { Phase = FollowPhase.Failed, CanRetry = request is not null, Message = ex.Message, IsError = true });
                 return;
@@ -268,6 +277,8 @@ public sealed class FollowCoordinator : IDisposable
             if (_lastQuietError != message || Current.Phase != phase)
             {
                 _lastQuietError = message;
+                if (ex is VideoNotReadyException) AppLog.Debug("Follow", $"等待视频：{ex.Message}");
+                else AppLog.Warn("Follow", $"轮询失败：{ex.Message}", ex);
                 Publish(Current with { Video = null, Phase = phase, Message = message, IsError = ex is not VideoNotReadyException });
             }
         }
@@ -279,6 +290,7 @@ public sealed class FollowCoordinator : IDisposable
     private void Publish(FollowSnapshot state)
     {
         if (_stopped) return;
+        if (state.Phase != Current.Phase) AppLog.Info("Follow", $"阶段 {Current.Phase} → {state.Phase}：{state.Message}");
         Current = state with { Request = Session.Current, AutomaticPending = Session.AutomaticPending };
         Changed?.Invoke(Current);
     }
@@ -287,7 +299,7 @@ public sealed class FollowCoordinator : IDisposable
         var time = TimeSpan.FromSeconds(Math.Max(0, seconds));
         return time.TotalHours >= 1 ? $"{(int)time.TotalHours}:{time.Minutes:00}:{time.Seconds:00}" : $"{(int)time.TotalMinutes:00}:{time.Seconds:00}";
     }
-    public void Stop() { _stopped = true; _lifetime.Cancel(); Session.Suppress(); }
+    public void Stop() { if (!_stopped) AppLog.Info("Follow", "停止跟随。"); _stopped = true; _lifetime.Cancel(); Session.Suppress(); }
     public Task DrainAsync() => _work.DrainAsync();
     public void Dispose() { Stop(); Session.Dispose(); _lifetime.Dispose(); _commands.Dispose(); }
 }

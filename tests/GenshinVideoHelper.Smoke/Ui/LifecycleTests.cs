@@ -82,14 +82,15 @@ internal static class LifecycleTests
             Check(!unrelatedProcess.HasExited && (await new CdpClient().SendAsync(unrelated.BrowserSocket, "Browser.getVersion", new { })).ValueKind == JsonValueKind.Object,
                 "Another Chrome profile remains alive and responsive");
 
-            var staleProfile = Path.Combine(root, "artifacts", "stale-profile-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(staleProfile);
+            using var staleDirectory = TestArtifacts.CreateTemp(root, "stale-profile");
+            var staleProfile = staleDirectory.Path;
             var staleLines = await File.ReadAllLinesAsync(Path.Combine(unrelated.ProfileDirectory, "DevToolsActivePort"));
             await File.WriteAllLinesAsync(Path.Combine(staleProfile, "DevToolsActivePort"), [staleLines[0], "/devtools/browser/wrong-session"]);
             using var stale = new ChromeBrowser(staleProfile);
             await stale.CloseAsync();
             Check(!unrelatedProcess.HasExited, "Stale port file cannot close a different browser session");
-            var startupProfile = Path.Combine(root, "artifacts", "startup-exit-" + Guid.NewGuid().ToString("N"));
+            using var startupDirectory = TestArtifacts.CreateTemp(root, "startup-exit");
+            var startupProfile = startupDirectory.Path;
             var startupWindow = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { VideoUrl = "https://www.bilibili.com/video/BV1hjgG6jEa6/?p=3", SelectedVideoLibraryId = null }, startupProfile, episodeFactory: PreviewService))
             { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
             try

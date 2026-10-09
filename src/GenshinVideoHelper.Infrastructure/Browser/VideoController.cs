@@ -3,6 +3,7 @@ using System.Text.Json;
 
 using GenshinVideoHelper.Core.Models;
 using GenshinVideoHelper.Core.Contracts;
+using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.Infrastructure.Browser;
 
@@ -34,6 +35,7 @@ public sealed class VideoController : IVideoPlayer, IVideoActivitySource, IDispo
             await _client.SendAsync(endpoint, "Runtime.addBinding", new { name = "__gvhMediaReady" }, token);
             await _client.SendAsync(endpoint, "Page.addScriptToEvaluateOnNewDocument", new { source = MediaObserver }, token);
             _watched[endpoint] = (_client.ConnectionId(endpoint), page.Id);
+            AppLog.Info("Video", $"已挂接页面 {page.Id} 的媒体事件。");
             await _client.SendAsync(endpoint, "Runtime.evaluate", new { expression = MediaObserver }, token);
         }
         finally { _monitoring.Release(); }
@@ -75,6 +77,7 @@ public sealed class VideoController : IVideoPlayer, IVideoActivitySource, IDispo
                 ? description.GetString() : details.GetProperty("text").GetString();
             if (message?.Contains("VIDEO_NOT_READY:") == true)
                 throw new VideoNotReadyException("视频尚未加载，请在浏览器中完成登录或等待视频加载。");
+            AppLog.Warn("Video", $"页面脚本执行 {command.Action} 失败：{message}");
             throw new InvalidOperationException(message?.Split('\n')[0] ?? "视频操作失败。");
         }
         if (!reply.GetProperty("result").TryGetProperty("value", out var value))

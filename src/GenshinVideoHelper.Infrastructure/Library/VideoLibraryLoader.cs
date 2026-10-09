@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using GenshinVideoHelper.Core.Models;
+using GenshinVideoHelper.Core.Diagnostics;
 using GenshinVideoHelper.Core.Library;
 
 namespace GenshinVideoHelper.Infrastructure.Library;
@@ -26,8 +27,12 @@ public static class VideoLibraryLoader
                 libraries.Add(library);
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or ArgumentException or InvalidOperationException)
-            { errors.Add($"{name}: {ex.Message}"); }
+            {
+                AppLog.Warn("Library", $"视频库 {name} 加载失败。", ex);
+                errors.Add($"{name}: {ex.Message}");
+            }
         }
+        AppLog.Info("Library", $"已加载 {libraries.Count} 个内置视频库。");
         return new(libraries.AsReadOnly(), errors.AsReadOnly());
     }
 

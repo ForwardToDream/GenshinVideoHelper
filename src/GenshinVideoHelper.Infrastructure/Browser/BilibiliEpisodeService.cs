@@ -1,6 +1,7 @@
 using System.Text.Json;
 using GenshinVideoHelper.Core.Models;
 using GenshinVideoHelper.Core.Contracts;
+using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.Infrastructure.Browser;
 
@@ -29,8 +30,10 @@ public sealed class BilibiliEpisodeService : IEpisodeProvider, IDisposable
             if (reply.TryGetProperty("result", out var result) && result.TryGetProperty("value", out var data) &&
                 data.ValueKind == JsonValueKind.Object && data.GetProperty("bvid").GetString() == identity.Bvid)
                 return ParseVideoData(data, identity);
+            AppLog.Info("Episodes", $"页面尚无 {identity.Bvid} 的分集数据，改用接口读取。");
         }
-        catch (Exception ex) when (ex is IOException or TimeoutException or InvalidOperationException or JsonException or ArgumentException or KeyNotFoundException) { }
+        catch (Exception ex) when (ex is IOException or TimeoutException or InvalidOperationException or JsonException or ArgumentException or KeyNotFoundException)
+        { AppLog.Info("Episodes", $"从页面读取 {identity.Bvid} 分集失败，改用接口：{ex.GetType().Name}: {ex.Message}"); }
         token.ThrowIfCancellationRequested();
         return await ReadFromApiAsync(identity, token);
     }
@@ -38,10 +41,15 @@ public sealed class BilibiliEpisodeService : IEpisodeProvider, IDisposable
     public async Task<BilibiliVideoInfo> ReadFromApiAsync(VideoIdentity identity, CancellationToken token = default)
     {
         using var response = await _http.GetAsync("https://api.bilibili.com/x/web-interface/view?bvid=" + Uri.EscapeDataString(identity.Bvid), token);
+        if (!response.IsSuccessStatusCode) AppLog.Warn("Episodes", $"分集接口返回 HTTP {(int)response.StatusCode}：{identity.Bvid}");
         response.EnsureSuccessStatusCode();
         using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(token), cancellationToken: token);
-        if (json.RootElement.GetProperty("code").GetInt32() != 0)
+        var code = json.RootElement.GetProperty("code").GetInt32();
+        if (code != 0)
+        {
+            AppLog.Warn("Episodes", $"分集接口返回业务码 {code}：{identity.Bvid}");
             throw new InvalidOperationException("未能读取分集信息，可重试；视频播放控制仍可使用。");
+        }
         return ParseVideoData(json.RootElement.GetProperty("data"), identity);
     }
 

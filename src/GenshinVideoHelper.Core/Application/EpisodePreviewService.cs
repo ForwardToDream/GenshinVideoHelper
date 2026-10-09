@@ -1,4 +1,5 @@
 using GenshinVideoHelper.Core.Contracts;
+using GenshinVideoHelper.Core.Diagnostics;
 using GenshinVideoHelper.Core.Models;
 
 namespace GenshinVideoHelper.Core.Application;
@@ -47,7 +48,11 @@ public sealed class EpisodePreviewService(IEpisodeProvider provider, EpisodeCach
             Publish(new(selected, info with { CurrentPart = selected.Part }, false, null));
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (Exception ex) { if (IsCurrent()) Publish(new(selected, null, false, ex.Message)); }
+        catch (Exception ex)
+        {
+            AppLog.Warn("Preview", $"分集预览失败：{selected.Bvid}", ex);
+            if (IsCurrent()) Publish(new(selected, null, false, ex.Message));
+        }
         bool IsCurrent() => !_stopped && !token.IsCancellationRequested && version == _version;
     }
 

@@ -4,6 +4,7 @@ using System.Text.Json;
 
 using GenshinVideoHelper.Core.Models;
 using GenshinVideoHelper.Core.Contracts;
+using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.Infrastructure.Browser;
 
@@ -32,8 +33,10 @@ public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
         try
         {
             ObjectDisposedException.ThrowIf(_closing, this);
+            var started = Stopwatch.GetTimestamp();
             if (!await TryConnectAsync(linked.Token)) await LaunchAsync(linked.Token);
-            await GetBrowserProcessIdAsync(linked.Token);
+            var pid = await GetBrowserProcessIdAsync(linked.Token);
+            AppLog.Info("Chrome", $"预热完成：PID {pid}，{Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms。");
         }
         finally { _lifecycle.Release(); }
     }
@@ -47,10 +50,13 @@ public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
         {
             ObjectDisposedException.ThrowIf(_closing, this);
             token = linked.Token;
+            var started = Stopwatch.GetTimestamp();
             if (!await TryConnectAsync(token)) await LaunchAsync(token);
             var reply = await _client.SendAsync(await GetBrowserSocketAsync(token), "Target.createTarget",
                 new { url = url.AbsoluteUri, newWindow = true, background = true, windowState = "minimized" }, token);
-            return await WaitForPageAsync(reply.GetProperty("targetId").GetString(), url.AbsoluteUri, token);
+            var page = await WaitForPageAsync(reply.GetProperty("targetId").GetString(), url.AbsoluteUri, token);
+            AppLog.Info("Chrome", $"已打开页面 {page.Id}：{url.AbsoluteUri}，{Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms。");
+            return page;
         }
         finally { _lifecycle.Release(); }
     }
@@ -58,7 +64,12 @@ public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
     private async Task LaunchAsync(CancellationToken token)
     {
         Directory.CreateDirectory(_profileDirectory);
-        var chrome = FindChrome() ?? throw new FileNotFoundException("未找到 Chrome，请先安装桌面版 Google Chrome。");
+        var chrome = FindChrome();
+        if (chrome is null)
+        {
+            AppLog.Error("Chrome", "未找到 chrome.exe（已检查 Program Files、Program Files (x86)、LocalAppData）。");
+            throw new FileNotFoundException("未找到 Chrome，请先安装桌面版 Google Chrome。");
+        }
         var startInfo = new ProcessStartInfo(chrome) { UseShellExecute = false,
             WindowStyle = ProcessWindowStyle.Hidden };
         startInfo.ArgumentList.Add($"--user-data-dir={_profileDirectory}");
@@ -78,6 +89,7 @@ public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
             _ = launched.Handle;
             lock (_launchedProcesses) _launchedProcesses.Add(launched);
         }
+        AppLog.Info("Chrome", $"启动 {chrome}，PID {launched?.Id}，配置目录 {_profileDirectory}。");
         using var startup = CancellationTokenSource.CreateLinkedTokenSource(token);
         startup.CancelAfter(TimeSpan.FromSeconds(12));
         try
@@ -86,7 +98,10 @@ public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
             await GetBrowserProcessIdAsync(startup.Token);
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
-        { throw new TimeoutException("Chrome 启动超时，请重试开始跟随。"); }
+        {
+            AppLog.Error("Chrome", "启动后 12 秒内未能连接调试端口。");
+            throw new TimeoutException("Chrome 启动超时，请重试开始跟随。");
+        }
     }
     private async Task<BrowserPage> WaitForPageAsync(string? targetId, string url, CancellationToken token)
     {
@@ -99,6 +114,7 @@ public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
             if (page is not null) return page;
             await Task.Delay(50, token);
         }
+        AppLog.Warn("Chrome", $"新页面 {targetId} 未出现在页面列表中：{url}");
         throw new TimeoutException("视频页面打开超时，请重新开始跟随。");
     }
 
@@ -109,7 +125,12 @@ public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
         if (!IsBilibiliUrl(current.Url) && current.Url is not "" and not "about:blank")
             throw new InvalidOperationException("视频页面已离开 B 站，请重新开始跟随。");
         var result = await _client.SendAsync(new Uri(current.WebSocketDebuggerUrl), "Page.navigate", new { url = identity.Url }, token);
-        if (result.TryGetProperty("errorText", out var error)) throw new IOException(error.GetString());
+        if (result.TryGetProperty("errorText", out var error))
+        {
+            AppLog.Warn("Chrome", $"页面 {page.Id} 导航到 {identity.Url} 失败：{error.GetString()}");
+            throw new IOException(error.GetString());
+        }
+        AppLog.Info("Chrome", $"页面 {page.Id} 导航到 {identity.Url}。");
     }
 
     public async Task<IReadOnlyList<BrowserPage>> GetPagesAsync(CancellationToken token = default)
@@ -149,6 +170,7 @@ public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
         _ = owned.Handle; // Retain the verified process identity, including through exit/PID reuse.
         _ownedBrowser?.Dispose();
         _ownedBrowser = owned;
+        AppLog.Info("Chrome", $"已确认专用浏览器进程 PID {owned.Id}。");
         return owned.Id;
     }
 
@@ -179,12 +201,15 @@ public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
             _endpoint = candidate;
             _browserSocket = socket;
             _failedEndpoint = null;
+            AppLog.Info("Chrome", $"已连接调试端口 {port}。");
             return true;
         }
         catch (Exception ex) when (ex is IOException or HttpRequestException or JsonException or
                                   InvalidOperationException or UriFormatException or OperationCanceledException)
         {
             token.ThrowIfCancellationRequested();
+            if (_endpoint is not null) AppLog.Warn("Chrome", $"调试连接已失效：{ex.Message}");
+            else AppLog.Debug("Chrome", $"调试端口探测失败：{ex.GetType().Name}: {ex.Message}");
             _endpoint = null;
             _browserSocket = null;
             if (fingerprint is not null) { _failedEndpoint = fingerprint; _retryEndpointAfter = Environment.TickCount64 + 500; }
@@ -210,6 +235,7 @@ public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
     {
         if (_closeTask is not null) return _closeTask;
         _closing = true;
+        AppLog.Info("Chrome", "开始关闭专用浏览器。");
         _shutdown.Cancel();
         return _closeTask = Task.Run(CloseCoreAsync);
     }
@@ -217,6 +243,7 @@ public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
     private async Task CloseCoreAsync()
     {
         using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(2.1));
+        var started = Stopwatch.GetTimestamp();
         var entered = false;
         try
         {
@@ -234,7 +261,7 @@ public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
             }
             catch (Exception ex) when (ex is IOException or HttpRequestException or OperationCanceledException or
                 TimeoutException or InvalidOperationException or System.ComponentModel.Win32Exception or JsonException)
-            { Debug.WriteLine($"Chrome graceful close: {ex.Message}"); }
+            { AppLog.Warn("Chrome", $"优雅关闭未完成：{ex.GetType().Name}: {ex.Message}"); }
 
             await Task.WhenAll(OwnedProcesses().Where(p => !p.HasExited).Select(p => p.WaitForExitAsync(budget.Token)));
         }
@@ -243,10 +270,16 @@ public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
         {
             foreach (var process in OwnedProcesses())
             {
-                try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+                try
+                {
+                    if (process.HasExited) continue;
+                    AppLog.Warn("Chrome", $"PID {process.Id} 未在预算内退出，强制结束进程树。");
+                    process.Kill(entireProcessTree: true);
+                }
                 catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
-                { Debug.WriteLine($"Chrome final close: {ex.Message}"); }
+                { AppLog.Warn("Chrome", "强制结束失败。", ex); }
             }
+            AppLog.Info("Chrome", $"关闭流程结束，{Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms。");
             if (entered) _lifecycle.Release();
         }
     }

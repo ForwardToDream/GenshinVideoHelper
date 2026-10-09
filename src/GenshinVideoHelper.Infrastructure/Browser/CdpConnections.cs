@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text.Json;
+using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.Infrastructure.Browser;
 
@@ -30,9 +31,13 @@ internal sealed class CdpConnections : IDisposable
         deadline.CancelAfter(TimeSpan.FromSeconds(8));
         try { return await connection.SendAsync(method, parameters, deadline.Token).ConfigureAwait(false); }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
-        { throw new TimeoutException("浏览器响应超时，请确认视频页面仍然打开。"); }
+        {
+            AppLog.Warn("Cdp", $"{method} 在 8 秒内无响应：{Describe(endpoint)}");
+            throw new TimeoutException("浏览器响应超时，请确认视频页面仍然打开。");
+        }
         catch (WebSocketException ex) { throw new IOException("浏览器连接已断开。", ex); }
     }
+    private static string Describe(Uri endpoint) => endpoint.Port + endpoint.AbsolutePath;
     public void Dispose()
     {
         lock (_sync)
@@ -53,12 +58,13 @@ internal sealed class CdpConnections : IDisposable
         private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonElement>> _pending = new();
         private readonly Action<string, JsonElement> _event;
         private readonly Task _ready;
+        private readonly string _name;
         private int _nextId, _closed;
         public long Id { get; } = Interlocked.Increment(ref _nextConnection);
         public bool IsClosed => Volatile.Read(ref _closed) != 0;
 
         public Connection(Uri endpoint, Action<string, JsonElement> onEvent)
-        { _event = onEvent; _ready = ConnectAsync(endpoint); }
+        { _event = onEvent; _name = Describe(endpoint); _ready = ConnectAsync(endpoint); }
         private async Task ConnectAsync(Uri endpoint)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
@@ -66,9 +72,15 @@ internal sealed class CdpConnections : IDisposable
             try
             {
                 await _socket.ConnectAsync(endpoint, timeout.Token).ConfigureAwait(false);
+                AppLog.Debug("Cdp", $"连接 #{Id} 已建立：{_name}");
                 _ = ReceiveAsync();
             }
-            catch { Dispose(); throw; }
+            catch (Exception ex)
+            {
+                AppLog.Warn("Cdp", $"连接 #{Id} 建立失败：{_name}，{ex.GetType().Name}: {ex.Message}");
+                Dispose();
+                throw;
+            }
         }
         public async Task<JsonElement> SendAsync(string method, object parameters, CancellationToken token)
         {
@@ -121,13 +133,15 @@ internal sealed class CdpConnections : IDisposable
                     else if (root.TryGetProperty("method", out var method) && root.TryGetProperty("params", out var data))
                     {
                         try { _event(method.GetString()!, data.Clone()); }
-                        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"CDP event: {ex.Message}"); }
+                        catch (Exception ex) { AppLog.Warn("Cdp", "事件回调抛出异常。", ex); }
                     }
                 }
             }
             catch (Exception ex) { failure = ex is OperationCanceledException ? new IOException("浏览器连接已关闭。", ex) : ex; }
             finally
             {
+                // A local Dispose already reported nothing is expected; only remote or transport ends are worth noting.
+                if (!IsClosed) AppLog.Info("Cdp", $"连接 #{Id} 已断开：{_name}，{failure.GetType().Name}: {failure.Message}");
                 Dispose();
                 foreach (var pending in _pending.Values) pending.TrySetException(failure);
             }

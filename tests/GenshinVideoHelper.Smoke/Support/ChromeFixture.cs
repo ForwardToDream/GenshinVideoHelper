@@ -27,18 +27,19 @@ namespace GenshinVideoHelper.Smoke;
 internal sealed class ChromeFixture : IAsyncDisposable
     {
         private readonly Process _process;
+        private readonly TestArtifacts.TempDirectory _directory;
         public BrowserPage Page { get; }
         public Uri BrowserSocket { get; }
         public string ProfileDirectory { get; }
-        private ChromeFixture(Process process, BrowserPage page, Uri browserSocket, string profileDirectory)
-        { _process = process; Page = page; BrowserSocket = browserSocket; ProfileDirectory = profileDirectory; }
+        private ChromeFixture(Process process, TestArtifacts.TempDirectory directory, BrowserPage page, Uri browserSocket, string profileDirectory)
+        { _process = process; _directory = directory; Page = page; BrowserSocket = browserSocket; ProfileDirectory = profileDirectory; }
 
         public static async Task<ChromeFixture> StartAsync(string root, bool headed)
         {
-            var testDirectory = Path.Combine(root, "artifacts", "browser-test-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(testDirectory);
+            var directory = TestArtifacts.CreateTemp(root, "browser-test");
+            var testDirectory = directory.Path;
             var media = Path.Combine(root, "artifacts", "test-media", "sample.mp4");
-            if (!File.Exists(media)) throw new FileNotFoundException("Generate artifacts/test-media/sample.mp4 first.");
+            if (!File.Exists(media)) { directory.Dispose(); throw new FileNotFoundException("Generate artifacts/test-media/sample.mp4 first."); }
             var fixture = Path.Combine(testDirectory, "fixture.html");
             await File.WriteAllTextAsync(fixture, $"""
                 <!doctype html><html><title>GenshinVideoHelper media test</title><body>
@@ -71,7 +72,7 @@ internal sealed class ChromeFixture : IAsyncDisposable
                         var page = pages.RootElement.EnumerateArray().FirstOrDefault(item =>
                             item.GetProperty("type").GetString() == "page" && item.GetProperty("url").GetString()!.Contains("fixture.html"));
                         if (page.ValueKind != JsonValueKind.Object) continue;
-                        return new ChromeFixture(process, new BrowserPage(page.GetProperty("id").GetString()!,
+                        return new ChromeFixture(process, directory, new BrowserPage(page.GetProperty("id").GetString()!,
                             page.GetProperty("title").GetString()!, page.GetProperty("url").GetString()!,
                             page.GetProperty("webSocketDebuggerUrl").GetString()!),
                             new Uri(version.RootElement.GetProperty("webSocketDebuggerUrl").GetString()!), Path.Combine(testDirectory, "profile"));
@@ -80,7 +81,7 @@ internal sealed class ChromeFixture : IAsyncDisposable
                 }
                 throw new TimeoutException("Test Chrome did not start.");
             }
-            catch { if (!process.HasExited) process.Kill(entireProcessTree: true); process.Dispose(); throw; }
+            catch { if (!process.HasExited) process.Kill(entireProcessTree: true); process.Dispose(); directory.Dispose(); throw; }
         }
 
         public async Task CloseTabAsync() => await new CdpClient().SendAsync(BrowserSocket, "Target.closeTarget", new { targetId = Page.Id });
@@ -115,5 +116,6 @@ internal sealed class ChromeFixture : IAsyncDisposable
             catch (Exception ex) when (ex is IOException or TimeoutException or InvalidOperationException or HttpRequestException or TaskCanceledException) { }
             if (!await Task.Run(() => _process.WaitForExit(3000))) _process.Kill(entireProcessTree: true);
             _process.Dispose();
+            _directory.Dispose();
         }
     }

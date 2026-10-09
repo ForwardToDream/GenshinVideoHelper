@@ -2,6 +2,7 @@ using System.IO;
 using GenshinVideoHelper.App.Native;
 using GenshinVideoHelper.Core.Application;
 using GenshinVideoHelper.Core.Contracts;
+using GenshinVideoHelper.Core.Diagnostics;
 using GenshinVideoHelper.Core.Library;
 using GenshinVideoHelper.Core.Settings;
 using GenshinVideoHelper.Infrastructure.Browser;
@@ -33,6 +34,8 @@ public sealed class AppServices : IDisposable
     {
         var store = new JsonSettingsStore(ApplicationPaths.SettingsPath);
         var loaded = store.Load();
+        AppLog.MinLevel = loaded.Settings.LogLevel;
+        AppLog.Info("App", $"配置已加载，日志级别 {loaded.Settings.LogLevel}{(loaded.Warning is null ? "" : "；" + loaded.Warning)}。");
         return new(loaded.Settings, Path.Combine(ApplicationPaths.DataDirectory, "Chrome"), store, loadWarning: loaded.Warning, enableWarmup: true);
     }
 
@@ -64,7 +67,8 @@ public sealed class AppServices : IDisposable
     private async Task WarmupCoreAsync(IBrowserWarmup warmup)
     {
         try { await warmup.WarmupAsync(_lifetime.Token); }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Chrome warmup: {ex.Message}"); }
+        catch (OperationCanceledException) { AppLog.Info("App", "Chrome 预热已取消。"); }
+        catch (Exception ex) { AppLog.Warn("App", "Chrome 预热失败，将在开始跟随时重试。", ex); }
     }
     public Task CloseAsync()
     {
@@ -76,9 +80,14 @@ public sealed class AppServices : IDisposable
     private async Task CloseCoreAsync()
     {
         // Browser shutdown must not queue behind pending page requests.
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var work = Task.WhenAll(_warmup, Follow.DrainAsync(), Preview.DrainAsync(), Browser.CloseAsync());
-        try { await work.WaitAsync(TimeSpan.FromSeconds(2.5)); }
-        catch (TimeoutException) { System.Diagnostics.Debug.WriteLine("Exit cleanup reached its deadline."); }
+        try
+        {
+            await work.WaitAsync(TimeSpan.FromSeconds(2.5));
+            AppLog.Info("App", $"退出清理完成，{System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms。");
+        }
+        catch (TimeoutException) { AppLog.Warn("App", "退出清理超过 2.5 秒预算，不再等待。"); }
     }
     public void Dispose()
     {

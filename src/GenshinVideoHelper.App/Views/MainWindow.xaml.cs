@@ -13,6 +13,7 @@ using GenshinVideoHelper.Core.Application;
 using GenshinVideoHelper.App.Composition;
 using GenshinVideoHelper.Core.Settings;
 using GenshinVideoHelper.Core.Library;
+using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.App;
 
@@ -115,7 +116,7 @@ public partial class MainWindow : Window
     {
         try { Process.Start(new ProcessStartInfo(pathOrUrl) { UseShellExecute = true })?.Dispose(); }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
-        { SetStatus($"无法打开：{ex.Message}", true); }
+        { AppLog.Warn("App", $"无法打开 {pathOrUrl}", ex); SetStatus($"无法打开：{ex.Message}", true); }
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -169,6 +170,7 @@ public partial class MainWindow : Window
         catch (ArgumentException ex) { SetStatus(ex.Message, true); return; }
         if (_selectedInfo?.Bvid == identity.Bvid && !_selectedInfo.Episodes.Any(p => p.Number == identity.Part))
         { SetStatus($"此视频没有 P{identity.Part}，请选择有效分集。", true); return; }
+        AppLog.Info("App", $"用户开始跟随 {identity.Bvid} P{identity.Part}。");
         await Services.Follow.OpenAsync(identity);
         await PollAsync();
     }
@@ -179,7 +181,7 @@ public partial class MainWindow : Window
         await OpenVideoAsync();
     }
     private void EpisodeRetry_Click(object sender, RoutedEventArgs e) => PrepareEpisodePreview(immediate: true, forceReload: true);
-    private async void FollowRetry_Click(object sender, RoutedEventArgs e) { Services.Follow.Retry(); await PollAsync(); }
+    private async void FollowRetry_Click(object sender, RoutedEventArgs e) { AppLog.Info("App", "用户重试自动跟随。"); Services.Follow.Retry(); await PollAsync(); }
     private async void EpisodeSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_ready || _updatingControls || EpisodeSelector.SelectedItem is not EpisodeInfo episode) return;
@@ -188,7 +190,7 @@ public partial class MainWindow : Window
     private async void PreviousEpisode_Click(object sender, RoutedEventArgs e) => await MoveSelectedEpisodeAsync(-1);
     private async void NextEpisode_Click(object sender, RoutedEventArgs e) => await MoveSelectedEpisodeAsync(1);
     private async Task MoveEpisodeAsync(int direction) { await Services.Follow.MoveEpisodeAsync(direction); await PollAsync(); }
-    private async Task NavigateActiveEpisodeAsync(int part) { await Services.Follow.NavigateAsync(part); await PollAsync(); }
+    private async Task NavigateActiveEpisodeAsync(int part) { AppLog.Info("App", $"用户切换到 P{part}。"); await Services.Follow.NavigateAsync(part); await PollAsync(); }
     private Task PollAsync() => Services.Follow.PollAsync();
     private Task ControlAsync(VideoCommand command) => Services.Follow.ExecuteAsync(command);
     private Task TogglePipAsync() => ControlAsync(new("pip"));
@@ -333,17 +335,19 @@ public partial class MainWindow : Window
         StatusText.Text = message;
         StatusText.Foreground = (Brush)FindResource(error ? "WarningBrush" : "SuccessBrush");
     }
+    internal void ReportInternalError(Exception exception) =>
+        SetStatus($"发生内部错误，已写入日志：{exception.Message}", true);
     private bool SaveSettings()
     {
         if (Services.SettingsStore is null) return true;
         try { Services.SettingsStore.Save(_settings); return true; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { SetStatus($"设置未能保存：{ex.Message}", true); return false; }
+        { AppLog.Warn("Settings", "设置未能保存。", ex); SetStatus($"设置未能保存：{ex.Message}", true); return false; }
     }
     private void OnWindowStateChanged(object? sender, EventArgs e)
     {
         if (_closing) return;
-        if (WindowState == WindowState.Minimized) Hide();
+        if (WindowState == WindowState.Minimized) { AppLog.Info("App", "最小化到托盘。"); Hide(); }
         else _restoreState = WindowState;
     }
 
@@ -351,6 +355,7 @@ public partial class MainWindow : Window
     {
         if (_closing) return;
         var restoreState = _restoreState;
+        AppLog.Info("App", "从托盘恢复。");
         Show();
         WindowState = restoreState;
         Activate();
@@ -361,6 +366,7 @@ public partial class MainWindow : Window
         if (_shutdownComplete) return;
         if (_closing) { e.Cancel = true; return; }
         _closing = true;
+        AppLog.Info("App", "开始退出。");
         Hide();
         _ready = false;
         _poll.Stop();
@@ -374,7 +380,7 @@ public partial class MainWindow : Window
         if (closing.IsCompleted)
         {
             try { closing.GetAwaiter().GetResult(); }
-            catch (Exception ex) { Debug.WriteLine($"Browser exit: {ex.Message}"); }
+            catch (Exception ex) { AppLog.Warn("App", "退出清理出错。", ex); }
             _shutdownComplete = true;
             return;
         }
@@ -385,7 +391,7 @@ public partial class MainWindow : Window
     private async Task FinishExitAsync(Task closing)
     {
         try { await closing; }
-        catch (Exception ex) { Debug.WriteLine($"Browser exit: {ex.Message}"); }
+        catch (Exception ex) { AppLog.Warn("App", "退出清理出错。", ex); }
         finally
         {
             _shutdownComplete = true;

@@ -11,6 +11,7 @@ Windows 原神 B站攻略跟随助手：分集选择、Chrome 画中画和全局
 - 最小化收进托盘，双击恢复；退出同时关闭专用 Chrome 和画中画。
 - 鼠标进入浮窗四边各扩展 20% 的区域时隐藏，离开显示；主动关闭后不会自动重开。
 - 设置与绑定保存在根目录 `GenshinVideoHelper.settings.json`。
+- 日志在 `%LOCALAPPDATA%\GenshinVideoHelper\logs\app.log`，单个文件 1 MB，最多保留 4 个；排查问题时可把设置里的 `LogLevel` 改为 `Debug`。
 
 | 默认快捷键 | 操作 |
 | --- | --- |
@@ -33,6 +34,6 @@ dotnet build GenshinVideoHelper.sln -c Release
 .\scripts\publish.ps1
 ```
 
-发布目录：`artifacts/GenshinVideoHelper`。专项测试参数：`-Preview -Browser -Pip -Follow -Lifecycle -RenderUi -Latency`；本地浏览器专项需要 FFmpeg。`-Latency` 需要 Chrome 和联网， 单独记录启动、画中画与退出各阶段耗时至 `artifacts/latency`，超出体验阈值时提示警告。
+发布目录：`artifacts/GenshinVideoHelper`。专项测试参数：`-Preview -Browser -Pip -Follow -Lifecycle -RenderUi -Latency -Background`；本地浏览器专项需要 FFmpeg。测试临时目录在 `artifacts/test-run`，结束时自动删除。`-Latency` 需要 Chrome 和联网， 单独记录启动、画中画与退出各阶段耗时至 `artifacts/latency`（保留最近 10 次），超出体验阈值时提示警告。
 
 参考：[PCL](https://github.com/Meloong-Git/PCL)（龙腾猫跃，视觉） · [BGI](https://github.com/babalae/better-genshin-impact)（babalae，技术与组织）。

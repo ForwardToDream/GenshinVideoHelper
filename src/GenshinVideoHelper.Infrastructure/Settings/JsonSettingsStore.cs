@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Encodings.Web;
 using GenshinVideoHelper.Core.Contracts;
+using GenshinVideoHelper.Core.Diagnostics;
 using GenshinVideoHelper.Core.Settings;
 
 namespace GenshinVideoHelper.Infrastructure.Settings;
@@ -30,13 +31,18 @@ public sealed class JsonSettingsStore(string path) : ISettingsStore
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException or ArgumentException)
         {
             _preserveInvalidFile = exists;
+            AppLog.Warn("Settings", $"配置读取失败，暂用默认设置：{_path}", ex);
             settings = new AppSettings();
             warning = $"配置读取失败，暂用默认设置：{ex.Message}。保存时会备份原配置。";
         }
         if (!exists)
         {
             try { Save(settings); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { warning = $"无法创建根目录配置：{ex.Message}"; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                AppLog.Warn("Settings", $"无法创建配置：{_path}", ex);
+                warning = $"无法创建根目录配置：{ex.Message}";
+            }
         }
         return new(settings, warning);
     }
@@ -47,7 +53,9 @@ public sealed class JsonSettingsStore(string path) : ISettingsStore
         var contents = JsonSerializer.Serialize(settings, JsonOptions);
         if (_preserveInvalidFile && File.Exists(_path))
         {
-            File.Copy(_path, _path + $".{DateTime.Now:yyyyMMddHHmmssfff}.bak", overwrite: false);
+            var backup = _path + $".{DateTime.Now:yyyyMMddHHmmssfff}.bak";
+            File.Copy(_path, backup, overwrite: false);
+            AppLog.Info("Settings", $"已备份无法读取的原配置：{backup}");
             _preserveInvalidFile = false;
         }
         var temporaryPath = _path + ".tmp";

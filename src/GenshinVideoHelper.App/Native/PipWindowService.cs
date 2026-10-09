@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
+using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.App.Native;
 
@@ -16,6 +17,7 @@ public static class PipWindowService
             if (pip != 0) break;
             await Task.Delay(100, token);
         }
+        if (pip == 0) AppLog.Warn("Pip", $"2 秒内未找到 PID {browserProcessId} 的画中画窗口。");
         if (pip == 0)
             throw new InvalidOperationException("画中画已开启，但未找到浮窗。可手动拖到左下角，或点击“放回左下角”重试。");
 
@@ -30,7 +32,12 @@ public static class PipWindowService
         var height = Math.Min((int)Math.Round(width / ratio), (work.Bottom - work.Top) / 2);
         if (!SetWindowPos(pip, new nint(-1), work.Left + margin, work.Bottom - margin - height,
                 width, height, 0x0010)) // topmost, no activation; never reopen a closed native window
-            throw new Win32Exception(Marshal.GetLastWin32Error());
+        {
+            var error = Marshal.GetLastWin32Error();
+            AppLog.Warn("Pip", $"放置浮窗失败，错误码 {error}。");
+            throw new Win32Exception(error);
+        }
+        AppLog.Info("Pip", $"浮窗 0x{pip:X} 已放置：{work.Left + margin},{work.Bottom - margin - height} {width}×{height}，缩放 {scale:0.##}。");
     }
 
     public static nint FindPip(int browserProcessId, bool includeHidden = false)

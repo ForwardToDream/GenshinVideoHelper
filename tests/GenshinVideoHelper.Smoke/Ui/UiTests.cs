@@ -167,7 +167,7 @@ internal static class UiTests
     public static void RenderUi(string root)
     {
         var app = CreateTestApplication();
-        var window = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { HotkeysEnabled = false }, Path.Combine(root, "artifacts", "ui-test-profile"), episodeFactory: PreviewService));
+        var window = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { HotkeysEnabled = false }, TestArtifacts.PathFor(root, "ui-test-profile"), episodeFactory: PreviewService));
         Directory.CreateDirectory(Path.Combine(root, "artifacts"));
         Check(window.FindName("NavConnection") is null && window.FindName("NavPip") is null &&
                ((Grid)window.FindName("PagesHost")).Children.Count == 3, "Start, hotkeys and settings pages");
@@ -257,7 +257,7 @@ internal static class UiTests
         var library = VideoLibraryLoader.LoadBuiltIn().Libraries.Single();
         var second = library with { Id = "long-test-library", Name = "仅测试 · " + string.Concat(Enumerable.Repeat("长标题的一条龙地图导航视频库", 5)), Videos = [library.Videos[0] with { Title = string.Concat(Enumerable.Repeat("蒙德、璃月、龙脊雪山 · 长标题", 5)) }] };
         var multipleSettings = new AppSettings { HotkeysEnabled = false, SelectedVideoLibraryId = second.Id };
-        var multipleWindow = new GenshinVideoHelper.App.MainWindow(new AppServices(multipleSettings, Path.Combine(root, "artifacts", "ui-test-profile"), libraries: new VideoLibraryCatalog([library, second], []), episodeFactory: PreviewService));
+        var multipleWindow = new GenshinVideoHelper.App.MainWindow(new AppServices(multipleSettings, TestArtifacts.PathFor(root, "ui-test-profile"), libraries: new VideoLibraryCatalog([library, second], []), episodeFactory: PreviewService));
         Check(GetField<VideoLibrary>(multipleWindow, "_activeLibrary")!.Id == second.Id && ((ComboBox)multipleWindow.FindName("GuideVideoSelector")).Items.Count == 1, "Multiple-library saved ID selects matching list instead of first library");
         ((ComboBox)multipleWindow.FindName("GuideVideoSelector")).SelectedIndex = 0;
         Capture(multipleWindow, root, "ui-library-long-title-compact.png", 860, 600);
@@ -268,7 +268,7 @@ internal static class UiTests
         Check(multipleSettings.SelectedVideoLibraryId == library.Id && ((ComboBox)multipleWindow.FindName("GuideVideoSelector")).Items.Count == 22, "Switching between two libraries reloads correct map list");
         multipleWindow.Close();
         TestLibraryPicker(root, library, second);
-        var missingWindow = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { HotkeysEnabled = false, SelectedVideoLibraryId = "missing-library" }, Path.Combine(root, "artifacts", "ui-test-profile"), episodeFactory: PreviewService));
+        var missingWindow = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { HotkeysEnabled = false, SelectedVideoLibraryId = "missing-library" }, TestArtifacts.PathFor(root, "ui-test-profile"), episodeFactory: PreviewService));
         Check(((TextBlock)missingWindow.FindName("StatusText")).Text.Contains("不存在") && ((ComboBox)missingWindow.FindName("GuideVideoSelector")).Items.Count == 0 && ((TextBox)missingWindow.FindName("UrlInput")).IsEnabled, "Missing library preserves manual input and reports error");
         Capture(missingWindow, root, "ui-library-missing-compact.png", 860, 600);
         missingWindow.Close();

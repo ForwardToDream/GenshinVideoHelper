@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using GenshinVideoHelper.Core.Settings;
+using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.App;
 
@@ -109,6 +110,7 @@ public partial class MainWindow
             var previous = _settings.Hotkeys;
             _settings.Hotkeys = next;
             if (!SaveSettings()) { _settings.Hotkeys = previous; BindingStatus.Text = "保存失败，已保存的绑定仍然有效。"; return; }
+            AppLog.Info("Hotkey", $"绑定已保存：{string.Join("，", next.Select(pair => $"{pair.Key}={pair.Value}"))}");
             ApplyHotkeys();
             UpdateHotkeyTooltips();
             BindingStatus.Text = "绑定已保存。注册情况见上方；被占用的组合键可以修改后再次保存。";

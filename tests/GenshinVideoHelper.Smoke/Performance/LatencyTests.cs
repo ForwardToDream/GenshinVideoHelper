@@ -36,7 +36,8 @@ internal static class LatencyTests
 
     private static async Task BackgroundAsync(string root)
     {
-        var directory = Path.Combine(root, "artifacts", "background-" + Guid.NewGuid().ToString("N"));
+        using var temporary = TestArtifacts.CreateTemp(root, "background");
+        var directory = temporary.Path;
         var otherProfile = Path.Combine(directory, "other-chrome");
         using var other = new ChromeBrowser(otherProfile);
         using var cdp = new CdpClient();
@@ -101,24 +102,27 @@ internal static class LatencyTests
     {
         var directory = Path.Combine(root, "artifacts", "latency", DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..6]);
         Directory.CreateDirectory(directory);
+        // Only the report is kept; every Chrome profile of the run is temporary.
+        using var temporary = TestArtifacts.CreateTemp(root, "latency");
+        var profiles = temporary.Path;
         var results = new List<Measurement>();
         try
         {
-            var profile = Path.Combine(directory, "profile");
+            var profile = Path.Combine(profiles, "profile");
             await MeasureFollowAsync("fresh-profile", profile, results);
             await MeasureFollowAsync("reused-profile", profile, results);
             await MeasureFollowAsync("prewarmed-profile", profile, results, prewarm: true);
-            await MeasureWarmupExitAsync(Path.Combine(directory, "warmup-exit"), results);
+            await MeasureWarmupExitAsync(Path.Combine(profiles, "warmup-exit"), results);
             await MeasureIdleExitAsync(profile, results);
             // A listening but unresponsive stale endpoint reproduces the bounded connection probe.
             using var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
-            var staleProfile = Path.Combine(directory, "stale-profile");
+            var staleProfile = Path.Combine(profiles, "stale-profile");
             Directory.CreateDirectory(staleProfile);
             await File.WriteAllLinesAsync(Path.Combine(staleProfile, "DevToolsActivePort"),
                 [((IPEndPoint)listener.LocalEndpoint).Port.ToString(), "/devtools/browser/stale-test"]);
             await MeasureFollowAsync("unresponsive-stale-endpoint", staleProfile, results);
-            await MeasurePendingExitAsync(Path.Combine(directory, "pending-profile"), results);
+            await MeasurePendingExitAsync(Path.Combine(profiles, "pending-profile"), results);
         }
         finally
         {
@@ -127,6 +131,7 @@ internal static class LatencyTests
             var reportPath = Path.Combine(directory, "report.json");
             await File.WriteAllTextAsync(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
             Console.WriteLine("Latency report: " + reportPath);
+            TestArtifacts.PruneLatency(root);
         }
     }
 

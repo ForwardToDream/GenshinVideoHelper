@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using GenshinVideoHelper.Core.Settings;
+using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.App.Native;
 
@@ -43,6 +44,7 @@ public sealed class PipMouseVisibilityService : IDisposable
         {
             Suspend();
             BrowserProcessId = processId;
+            AppLog.Info("Pip", $"开始跟踪 PID {processId} 的浮窗显隐。");
         }
         if (_pollAutomatically) _timer.Start();
         Refresh();
@@ -93,12 +95,14 @@ public sealed class PipMouseVisibilityService : IDisposable
             return;
         }
         _hiddenByUs = true;
+        AppLog.Debug("Pip", $"浮窗 0x{_window:X} 临时隐藏。");
     }
 
     public void Suspend()
     {
         _timer.Stop();
         Restore();
+        if (BrowserProcessId != 0) AppLog.Info("Pip", "停止跟踪浮窗显隐。");
         _window = 0;
         BrowserProcessId = 0;
     }
@@ -116,6 +120,7 @@ public sealed class PipMouseVisibilityService : IDisposable
             SetWindowLong(_window, ExtendedStyle,
                 (current & ~(Layered | Transparent)) | (_originalExtendedStyle & (Layered | Transparent)));
         }
+        if (_hiddenByUs) AppLog.Debug("Pip", $"浮窗 0x{_window:X} 恢复显示。");
         _hiddenByUs = false;
     }
 
