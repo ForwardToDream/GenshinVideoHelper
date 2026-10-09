@@ -4,9 +4,12 @@ using GenshinVideoHelper.Core.Application;
 using GenshinVideoHelper.Core.Contracts;
 using GenshinVideoHelper.Core.Diagnostics;
 using GenshinVideoHelper.Core.Library;
+using GenshinVideoHelper.Core.Models;
+using GenshinVideoHelper.Core.Progress;
 using GenshinVideoHelper.Core.Settings;
 using GenshinVideoHelper.Infrastructure.Browser;
 using GenshinVideoHelper.Infrastructure.Library;
+using GenshinVideoHelper.Infrastructure.Progress;
 using GenshinVideoHelper.Infrastructure.Settings;
 
 namespace GenshinVideoHelper.App.Composition;
@@ -17,6 +20,8 @@ public sealed class AppServices : IDisposable
     private readonly IDisposable? _ownedBrowser, _ownedEpisodes, _ownedVideo;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly bool _enableWarmup;
+    private readonly IEpisodeProvider _episodes;
+    private readonly EpisodeCache _cache = new();
     private Task _warmup = Task.CompletedTask;
     private Task? _closing;
     private bool _warmupStarted;
@@ -29,6 +34,7 @@ public sealed class AppServices : IDisposable
     public FollowCoordinator Follow { get; }
     public EpisodePreviewService Preview { get; }
     public WindowsPipController Pip { get; }
+    public WatchProgressService Progress { get; }
 
     public static AppServices CreateDefault()
     {
@@ -36,26 +42,41 @@ public sealed class AppServices : IDisposable
         var loaded = store.Load();
         AppLog.MinLevel = loaded.Settings.LogLevel;
         AppLog.Info("App", $"配置已加载，日志级别 {loaded.Settings.LogLevel}{(loaded.Warning is null ? "" : "；" + loaded.Warning)}。");
-        return new(loaded.Settings, Path.Combine(ApplicationPaths.DataDirectory, "Chrome"), store, loadWarning: loaded.Warning, enableWarmup: true);
+        return new(loaded.Settings, Path.Combine(ApplicationPaths.DataDirectory, "Chrome"), store, loadWarning: loaded.Warning, enableWarmup: true,
+            progressStore: new JsonProgressStore(ApplicationPaths.ProgressPath));
     }
 
     public AppServices(AppSettings settings, string browserProfile, ISettingsStore? store = null,
         VideoLibraryCatalog? libraries = null, IEpisodeProvider? episodes = null,
-        IBrowserSession? browser = null, IVideoPlayer? video = null, string? loadWarning = null, Func<IEpisodeProvider>? episodeFactory = null, bool enableWarmup = false)
+        IBrowserSession? browser = null, IVideoPlayer? video = null, string? loadWarning = null, Func<IEpisodeProvider>? episodeFactory = null, bool enableWarmup = false,
+        IProgressStore? progressStore = null)
     {
         _enableWarmup = enableWarmup;
-        Settings = settings; SettingsStore = store; LoadWarning = loadWarning;
+        Settings = settings; SettingsStore = store;
+        Progress = new(progressStore, settings.ProgressCompletionPercent / 100d);
+        LoadWarning = loadWarning is null || Progress.LoadWarning is null ? loadWarning ?? Progress.LoadWarning : $"{loadWarning} {Progress.LoadWarning}";
         Libraries = libraries ?? VideoLibraryLoader.LoadBuiltIn();
         if (browser is null) { var concrete = new ChromeBrowser(browserProfile); Browser = concrete; _ownedBrowser = concrete; }
         else Browser = browser;
         if (episodes is not null && episodeFactory is not null) throw new ArgumentException("Specify an episode service or a factory, not both.");
         if (episodes is null) { episodes = episodeFactory?.Invoke() ?? new BilibiliEpisodeService(); _ownedEpisodes = episodes as IDisposable; }
-        var cache = new EpisodeCache();
+        _episodes = episodes;
         Pip = new(settings);
-        Preview = new(episodes, cache);
+        Preview = new(episodes, _cache);
+        // A previewed video is known before it is ever followed, so its parts can be shown and pre-marked.
+        Preview.Changed += preview => { if (preview.Info is { } info) Progress.Describe(info); };
         if (video is null) { var concrete = new VideoController(); video = concrete; _ownedVideo = concrete; }
         VideoActivity = video as IVideoActivitySource;
-        Follow = new(Browser, video, episodes, Pip, cache);
+        Follow = new(Browser, video, episodes, Pip, _cache, progress: Progress);
+    }
+
+    /// <summary>Reads a video's parts without opening it, so its progress can be shown and edited.</summary>
+    public async Task LoadEpisodesAsync(string bvid, CancellationToken token)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _lifetime.Token);
+        var info = await _episodes.ReadFromApiAsync(new VideoIdentity(bvid, 1), linked.Token);
+        _cache.Store(info);
+        Progress.Describe(info);
     }
 
     public Task WarmupAsync()
@@ -75,6 +96,7 @@ public sealed class AppServices : IDisposable
         if (_closing is not null) return _closing;
         _lifetime.Cancel();
         Follow.Stop(); Preview.Stop(); Pip.Dispose();
+        Progress.Flush();
         return _closing = CloseCoreAsync();
     }
     private async Task CloseCoreAsync()

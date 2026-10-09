@@ -37,6 +37,14 @@ public interface ISettingsStore
     void Save(AppSettings settings);
 }
 
+public sealed record ProgressLoadResult(Progress.ProgressDocument Document, string? Warning = null);
+
+public interface IProgressStore
+{
+    ProgressLoadResult Load();
+    void Save(Progress.ProgressDocument document);
+}
+
 public interface IBrowserWarmup
 {
     Task WarmupAsync(CancellationToken token = default);

@@ -54,7 +54,8 @@ public sealed class VideoController : IVideoPlayer, IVideoActivitySource, IDispo
             }, 40);
           };
           for (const name of ['DOMContentLoaded', 'loadedmetadata', 'loadeddata', 'canplay', 'playing',
-                              'pause', 'ended', 'emptied', 'durationchange', 'enterpictureinpicture', 'leavepictureinpicture'])
+                              'pause', 'ended', 'emptied', 'durationchange', 'enterpictureinpicture', 'leavepictureinpicture',
+                              'seeking', 'seeked', 'ratechange'])
             document.addEventListener(name, notify, true);
           notify();
         })()

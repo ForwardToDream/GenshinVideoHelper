@@ -18,6 +18,7 @@ internal static class Program
             else if (args.Contains("--preview")) PreviewUiTest(root);
             else if (args.Contains("--lifecycle")) LifecycleUiTest(root);
             else if (args.Contains("--follow")) FollowUiTest(root);
+            else if (args.Contains("--progress")) ProgressTests.Run(root);
             else if (args.Contains("--background")) LatencyTests.Run(root, background: true);
             else if (args.Contains("--latency")) LatencyTests.Run(root);
             else throw new ArgumentException("Specify a desktop smoke mode; run core and infrastructure tests with dotnet test.");

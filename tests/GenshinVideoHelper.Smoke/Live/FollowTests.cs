@@ -60,6 +60,10 @@ internal static class FollowTests
             var pageCount = (await browser.GetPagesAsync()).Count;
             Console.WriteLine($"Auto follow: P3 ready; {info.Episodes.Count} parts; target={originalPage.Id}.");
             await TestAutomaticMouseVisibilityAsync(window);
+            GenshinVideoHelper.Core.Progress.EpisodeProgress? Watched(int part) => window.Services.Progress.Get("BV1hjgG6jEa6")?.FindPart(part);
+            await WaitForAsync(() => Watched(3) is { Watched: >= 3, Status: GenshinVideoHelper.Core.Progress.EpisodeStatus.InProgress }, "Real playback is recorded as watched", window);
+            Check(Watched(3)!.Segments.Count == 1 && Watched(4) is null or { HasActivity: false }, "Only the part that actually played has progress");
+            Console.WriteLine($"Watch progress: P3 recorded {Watched(3)!.Watched:0.0}s of real playback.");
             TestLibraryPickerFlow(window);
             await WaitForAsync(() => Ready(3), "Library picker confirm/cancel preserves live P3 and PiP", window);
             await WaitForAsync(() => window.Services.Preview.Current.Info?.Bvid == "BV1MXfEY4EQ2", "Library first map metadata preloads while live P3 continues", window);
@@ -146,6 +150,10 @@ internal static class FollowTests
             SendAltNumber(0x32);
             await WaitForAsync(() => window.Services.Follow.Current.Video is { Paused: false }, "Alt+2 resumes actual video", window);
             Console.WriteLine("Actual Alt+1 / Alt+2 / Alt+3 global keyboard actions passed.");
+            await WaitForAsync(() => Watched(3)!.Segments[^1] is { Start: >= 194, Length: >= 3 }, "Playback after a seek starts a new watched span", window);
+            Check(Watched(3)!.Segments.Count >= 2 && Watched(3)!.Segments[^2].End < 190 && Watched(3)!.Status == GenshinVideoHelper.Core.Progress.EpisodeStatus.InProgress,
+                "Seeking forward leaves the skipped part unwatched and does not complete the part");
+            Console.WriteLine("Watch progress: seek left the skipped span unwatched: " + string.Join(" ", Watched(3)!.Segments.Select(span => $"[{span.Start:0}-{span.End:0}]")));
             settings.Hotkeys[HotkeyAction.TogglePlayback] = "Ctrl+Alt+F8";
             Invoke(window, "ApplyHotkeys");
             Check(hotkeys.IsRegistered(HotkeyAction.TogglePlayback), "Custom playback binding registers");
@@ -176,6 +184,7 @@ internal static class FollowTests
             await (Task)Invoke(window, "OpenVideoAsync")!;
             await WaitForAsync(() => Ready(3), "Restart recovers from closed page", window);
             Check(window.Services.Follow.Current.Page!.Id != page.Id, "Restart selects new target");
+            Check(window.Services.Follow.Current.Video!.CurrentTime >= 195 && ((TextBlock)window.FindName("StatusText")).Text.Contains("继续"), "Reopened part resumes at the saved position");
             Console.WriteLine("Closed-page feedback and restart recovery passed.");
             await session.ShutdownBrowserAsync();
             await WaitForAsync(() => ((TextBlock)window.FindName("HeaderConnectionState")).Text == "连接已断开", "Entire browser close clears connection state", window);

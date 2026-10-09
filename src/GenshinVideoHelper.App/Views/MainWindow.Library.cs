@@ -19,6 +19,9 @@ public partial class MainWindow
             PopulateLibrary(_libraryCatalog.Libraries.FirstOrDefault(library => library.Id == _settings.SelectedVideoLibraryId));
             if (_activeLibrary is not null && (!VideoIdentity.TryParse(UrlInput.Text, out var recent) || !_activeLibrary.Videos.Any(video => video.Bvid == recent!.Bvid)))
                 UrlInput.Text = _activeLibrary.Videos[0].Url;
+            // Continue where the map was left: the first part that is not completed yet.
+            if (VideoIdentity.TryParse(UrlInput.Text, out var restored) && ResumePart(restored!.Bvid, restored.Part, out _) is var part && part != restored.Part)
+                UrlInput.Text = new VideoIdentity(restored.Bvid, part).Url;
             SyncGuideVideoSelection();
         }
         finally { _updatingLibraryControls = false; }
@@ -49,7 +52,7 @@ public partial class MainWindow
         try
         {
             PopulateLibrary(library);
-            if (library is not null) UrlInput.Text = library.Videos[0].Url;
+            if (library is not null) UrlInput.Text = ResumeUrl(library.Videos[0].Bvid, 1, out _);
             SyncGuideVideoSelection();
         }
         finally { _updatingLibraryControls = false; }
@@ -61,11 +64,12 @@ public partial class MainWindow
     private void GuideVideoSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_ready || _updatingLibraryControls || GuideVideoSelector.SelectedItem is not LibraryVideo video) return;
+        string? note;
         _updatingLibraryControls = true;
-        try { UrlInput.Text = video.Url; }
+        try { UrlInput.Text = ResumeUrl(video.Bvid, 1, out note); }
         finally { _updatingLibraryControls = false; }
         PrepareEpisodePreview(immediate: true);
-        SetStatus($"已选择 {video.Title}，点击“开始跟随”打开。");
+        SetStatus($"已选择 {video.Title}，{note}点击“开始跟随”打开。");
     }
 
     private void UrlInput_TextChanged(object sender, TextChangedEventArgs e)

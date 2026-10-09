@@ -1,6 +1,7 @@
 using GenshinVideoHelper.Core.Contracts;
 using GenshinVideoHelper.Core.Diagnostics;
 using GenshinVideoHelper.Core.Models;
+using GenshinVideoHelper.Core.Progress;
 
 namespace GenshinVideoHelper.Core.Application;
 
@@ -18,6 +19,8 @@ public sealed class FollowCoordinator : IDisposable
     private readonly IPipController _pip;
     private readonly EpisodeCache _cache;
     private readonly TimeProvider _clock;
+    private readonly WatchProgressService? _progress;
+    private readonly long _started;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly SemaphoreSlim _commands = new(1, 1);
     private readonly BackgroundWork _work = new();
@@ -26,15 +29,19 @@ public sealed class FollowCoordinator : IDisposable
     private DateTimeOffset _began;
     private bool _polling, _stopped;
     private string? _lastQuietError;
+    private long _resumeVersion;
+    private double? _resumedTo;
     public FollowSession Session { get; }
     public FollowSnapshot Current { get; private set; } = new(null, null, null, null, FollowPhase.Idle, false, false, null, false);
     public event Action<FollowSnapshot>? Changed;
 
     public FollowCoordinator(IBrowserSession browser, IVideoPlayer video, IEpisodeProvider episodes,
-        IPipController pip, EpisodeCache cache, TimeProvider? clock = null)
+        IPipController pip, EpisodeCache cache, TimeProvider? clock = null, WatchProgressService? progress = null)
     {
         _browser = browser; _video = video; _episodes = episodes; _pip = pip; _cache = cache;
         _clock = clock ?? TimeProvider.System;
+        _progress = progress;
+        _started = _clock.GetTimestamp();
         Session = new(_lifetime.Token);
     }
 
@@ -97,8 +104,10 @@ public sealed class FollowCoordinator : IDisposable
         _began = _clock.GetUtcNow();
         _navigatingVersion = 0;
         _lastQuietError = null;
+        _resumedTo = null;
         AppLog.Info("Follow", $"请求 #{request.Version}：{identity.Bvid} P{identity.Part}，目标页 {(page is null ? "新建" : page.Id)}。");
         var info = _cache.Get(identity) ?? (Current.Info?.Bvid == identity.Bvid ? Current.Info with { CurrentPart = identity.Part } : null);
+        if (info is not null) Track(progress => progress.Describe(info));
         Publish(new(request, page, null, info, phase, true, false, "正在准备跟随，视频就绪后自动播放并开启画中画。", false));
         return request;
     }
@@ -112,6 +121,7 @@ public sealed class FollowCoordinator : IDisposable
             var info = await _episodes.ReadAsync(page, request.Token);
             if (!IsCurrent(request) || version != _metadataVersion) return;
             _cache.Store(info);
+            Track(progress => progress.Describe(info));
             Publish(Current with { Info = info });
         }
         catch (OperationCanceledException) when (request.Token.IsCancellationRequested) { }
@@ -144,6 +154,9 @@ public sealed class FollowCoordinator : IDisposable
         var episode = Current.Info?.Bvid == request.Identity.Bvid ? Current.Info.Episodes.FirstOrDefault(p => p.Number == request.Identity.Part) : null;
         if (episode is not null && (state.Cid is { } cid && cid != episode.Cid || episode.Duration > 0 && state.Duration is { } duration && Math.Abs(duration - episode.Duration) > 2))
             throw new VideoNotReadyException("正在等待所选分集的媒体加载。");
+        // Only a state that passed every identity check above may count as watched.
+        var at = _clock.GetElapsedTime(_started);
+        Track(progress => progress.Observe(request.Identity, episode?.Cid ?? state.Cid, state, at));
         if (state.PictureInPicture)
         {
             var pid = await _browser.GetBrowserProcessIdAsync(request.Token);
@@ -176,6 +189,8 @@ public sealed class FollowCoordinator : IDisposable
                 if (!Session.AutomaticPending || !IsCurrent(request)) return;
                 try
                 {
+                    state = await ResumeAsync(state, request);
+                    if (!Session.AutomaticPending || !IsCurrent(request)) return;
                     state = await ReadVideoAsync(new("ensurePlay"), request);
                     if (!Session.AutomaticPending || !IsCurrent(request)) return;
                     state = await ReadVideoAsync(new("ensurePip"), request);
@@ -183,7 +198,8 @@ public sealed class FollowCoordinator : IDisposable
                     await PlaceAsync(state, request);
                     EnsureCurrent(request);
                     Session.Complete(request);
-                    Publish(Current with { Phase = FollowPhase.Following, CanRetry = false, Message = "已开始跟随，画中画置顶在左下角。可以最小化工具进入游戏。", IsError = false });
+                    var resumed = _resumedTo is { } position ? $"已从 {TimeText.Format(position)} 继续。" : "";
+                    Publish(Current with { Phase = FollowPhase.Following, CanRetry = false, Message = resumed + "已开始跟随，画中画置顶在左下角。可以最小化工具进入游戏。", IsError = false });
                 }
                 catch (VideoNotReadyException) { throw; }
                 catch (OperationCanceledException) when (!IsCurrent(request)) { }
@@ -197,6 +213,28 @@ public sealed class FollowCoordinator : IDisposable
             }, () => request, quiet: true);
         }
         finally { _polling = false; }
+    }
+
+    // Once per request: continue where the viewer last settled instead of where the player happens to start.
+    private async Task<VideoState> ResumeAsync(VideoState state, FollowRequest request)
+    {
+        if (_resumeVersion == request.Version) return state;
+        if (_progress?.ResumePosition(request.Identity) is { } position && Math.Abs(state.CurrentTime - position) > 5)
+        {
+            state = await ReadVideoAsync(new("seek", position, Absolute: true), request);
+            _resumedTo = position;
+            AppLog.Info("Follow", $"续播：{request.Identity.Bvid} P{request.Identity.Part} 跳到 {TimeText.Format(position)}。");
+        }
+        _resumeVersion = request.Version;
+        return state;
+    }
+
+    // Progress is auxiliary: a failure in it must never interrupt playback control.
+    private void Track(Action<WatchProgressService> action)
+    {
+        if (_progress is null) return;
+        try { action(_progress); }
+        catch (Exception ex) { AppLog.Error("Progress", "进度记录出错。", ex); }
     }
 
     public Task ExecuteAsync(VideoCommand command) => _work.Track(ExecuteCoreAsync(command));

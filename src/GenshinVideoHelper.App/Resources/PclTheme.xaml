@@ -47,6 +47,24 @@
       </ControlTemplate.Triggers>
     </ControlTemplate></Setter.Value></Setter>
   </Style>
+  <Style x:Key="CompactListItem" TargetType="ListBoxItem">
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="10,7" /><Setter Property="Margin" Value="0,0,0,3" />
+    <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+      <Border x:Name="RowBorder" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="4" Padding="{TemplateBinding Padding}"><ContentPresenter /></Border>
+      <ControlTemplate.Triggers>
+        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="RowBorder" Property="Background" Value="{StaticResource HoverBrush}" /></Trigger>
+        <Trigger Property="IsSelected" Value="True"><Setter TargetName="RowBorder" Property="Background" Value="{StaticResource SelectedBrush}" /><Setter TargetName="RowBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" /></Trigger>
+        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="RowBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" /></Trigger>
+      </ControlTemplate.Triggers>
+    </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="ProgressBar">
+    <Setter Property="Height" Value="5" /><Setter Property="Maximum" Value="1" /><Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" /><Setter Property="Background" Value="{StaticResource BorderBrush}" /><Setter Property="Focusable" Value="False" />
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ProgressBar">
+      <Grid><Border x:Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="2" /><Border x:Name="PART_Indicator" Background="{TemplateBinding Foreground}" CornerRadius="2" HorizontalAlignment="Left" /></Grid>
+    </ControlTemplate></Setter.Value></Setter>
+  </Style>
   <Style TargetType="Button">
     <Setter Property="Foreground" Value="{StaticResource AccentBrush}" /><Setter Property="Background" Value="White" />
     <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" /><Setter Property="BorderThickness" Value="1" />
@@ -68,6 +86,9 @@
   </Style>
   <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Background" Value="{StaticResource PrimaryBrush}" /><Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}" /><Setter Property="Foreground" Value="White" /></Style>
   <Style x:Key="SubtleButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" /><Setter Property="Foreground" Value="{StaticResource TextBrush}" /></Style>
+  <Style x:Key="SmallButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Padding" Value="10,5" /><Setter Property="MinHeight" Value="28" /><Setter Property="FontSize" Value="12" /></Style>
+  <Style x:Key="SmallSubtleButton" TargetType="Button" BasedOn="{StaticResource SmallButton}"><Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" /><Setter Property="Foreground" Value="{StaticResource TextBrush}" /></Style>
+  <Style x:Key="SmallPrimaryButton" TargetType="Button" BasedOn="{StaticResource SmallButton}"><Setter Property="Background" Value="{StaticResource PrimaryBrush}" /><Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}" /><Setter Property="Foreground" Value="White" /></Style>
   <Style x:Key="CaptionButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
     <Setter Property="Foreground" Value="White" /><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" />
     <Setter Property="Width" Value="40" /><Setter Property="MinHeight" Value="40" /><Setter Property="Padding" Value="0" />

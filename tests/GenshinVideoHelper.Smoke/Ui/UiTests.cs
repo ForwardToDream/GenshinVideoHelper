@@ -170,9 +170,9 @@ internal static class UiTests
         var window = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { HotkeysEnabled = false }, TestArtifacts.PathFor(root, "ui-test-profile"), episodeFactory: PreviewService));
         Directory.CreateDirectory(Path.Combine(root, "artifacts"));
         Check(window.FindName("NavConnection") is null && window.FindName("NavPip") is null &&
-               ((Grid)window.FindName("PagesHost")).Children.Count == 3, "Start, hotkeys and settings pages");
+               ((Grid)window.FindName("PagesHost")).Children.Count == 4, "Start, progress, hotkeys and settings pages");
         Check(window.FindName("OtherPagesExpander") is null && window.FindName("PageSelector") is null, "Other-video-page section removed");
-        foreach (var (key, title) in new[] { ("Follow", "启动"), ("Hotkeys", "快捷键"), ("Settings", "设置") })
+        foreach (var (key, title) in new[] { ("Follow", "启动"), ("Progress", "进度"), ("Hotkeys", "快捷键"), ("Settings", "设置") })
         {
             ((RadioButton)window.FindName("Nav" + key)).IsChecked = true;
             Check(((TextBlock)window.FindName("PageHeading")).Text == title, "Navigate " + key);
@@ -214,6 +214,8 @@ internal static class UiTests
         Capture(window, root, "ui-settings-expanded-compact.png", 860, 600);
         ((RadioButton)window.FindName("NavFollow")).IsChecked = true;
         Check(((TextBlock)window.FindName("VideoTitle")).Text == before && GetField<VideoState>(window, "_state") == state, "Settings navigation preserves video state");
+        ProgressUiTests.Run(window, root);
+        ((RadioButton)window.FindName("NavFollow")).IsChecked = true;
         ((Button)window.FindName("FollowRetryButton")).Visibility = Visibility.Visible;
         ((TextBlock)window.FindName("StatusText")).Text = "自动跟随未完成：浏览器请求被拒绝，请完成登录后重试。此处用长状态提示验证省略显示与完整悬停提示。";
         Capture(window, root, "ui-follow-error-compact.png", 860, 600);
@@ -272,7 +274,7 @@ internal static class UiTests
         Check(((TextBlock)missingWindow.FindName("StatusText")).Text.Contains("不存在") && ((ComboBox)missingWindow.FindName("GuideVideoSelector")).Items.Count == 0 && ((TextBox)missingWindow.FindName("UrlInput")).IsEnabled, "Missing library preserves manual input and reports error");
         Capture(missingWindow, root, "ui-library-missing-compact.png", 860, 600);
         missingWindow.Close();
-        Console.WriteLine("WPF UI: three panels, default/minimum sizes, full-row Start below episodes, part boundaries, long title and state preservation passed.");
+        Console.WriteLine("WPF UI: four panels, progress editing, default/minimum sizes, full-row Start below episodes, part boundaries, long title and state preservation passed.");
     }
 
 }

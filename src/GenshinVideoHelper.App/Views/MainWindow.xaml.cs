@@ -48,6 +48,8 @@ public partial class MainWindow : Window
         Services = services;
         _settings = services.Settings;
         _libraryCatalog = services.Libraries;
+        // Referenced by the item templates, so it has to exist before the markup is loaded.
+        Resources["ProgressLookup"] = _progressLookup = new(services.Progress, () => _selectedInfo?.Bvid);
         InitializeComponent();
         UrlInput.Text = _settings.VideoUrl;
         ConfigPathText.Text = "配置文件：根目录 GenshinVideoHelper.settings.json";
@@ -69,11 +71,12 @@ public partial class MainWindow : Window
         Closing += OnClosing;
         Closed += OnClosed;
         StateChanged += OnWindowStateChanged;
-        _poll.Tick += async (_, _) => await PollAsync();
+        _poll.Tick += async (_, _) => { Services.Progress.SaveIfDue(); await PollAsync(); };
         Services.Follow.Changed += DisplayFollow;
         if (Services.VideoActivity is { } activity) activity.MediaActivity += OnMediaActivity;
         Loaded += async (_, _) => { if (!_closing) await Services.WarmupAsync(); };
         Services.Preview.Changed += DisplayPreview;
+        InitializeProgress();
         InitializeLibraries();
         _ready = true;
         _previewDebounce.Tick += async (_, _) => await LoadSelectedEpisodesAsync();
@@ -91,8 +94,10 @@ public partial class MainWindow : Window
         FollowPage.Visibility = key == "Follow" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPage.Visibility = key == "Settings" ? Visibility.Visible : Visibility.Collapsed;
         HotkeysPage.Visibility = key == "Hotkeys" ? Visibility.Visible : Visibility.Collapsed;
-        PageHeading.Text = key switch { "Settings" => "设置", "Hotkeys" => "快捷键", _ => "启动" };
-        PageDescription.Text = key switch { "Settings" => "调整播放节奏与浮窗。", "Hotkeys" => "查看控制说明，修改游戏中使用的组合键。", _ => "选择攻略，自动播放并进入左下角画中画。" };
+        ProgressPage.Visibility = key == "Progress" ? Visibility.Visible : Visibility.Collapsed;
+        PageHeading.Text = key switch { "Settings" => "设置", "Hotkeys" => "快捷键", "Progress" => "进度", _ => "启动" };
+        PageDescription.Text = key switch { "Settings" => "调整播放节奏与浮窗。", "Hotkeys" => "查看控制说明，修改游戏中使用的组合键。", "Progress" => "每张地图跟到了哪里；只统计真正播放过的部分，可手动修正。", _ => "选择攻略，自动播放并进入左下角画中画。" };
+        if (key == "Progress") ShowProgressPage();
     }
 
     private void Minimize_Click(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
@@ -148,7 +153,9 @@ public partial class MainWindow : Window
         {
             _displayedIdentity = identity;
             RememberIdentity(identity);
+            if (ProgressPageVisible) RefreshProgressPage();
         }
+        UpdateWatchProgressText();
         if (snapshot.Info != _displayedInfo)
         {
             _displayedInfo = snapshot.Info;
@@ -371,6 +378,7 @@ public partial class MainWindow : Window
         _ready = false;
         _poll.Stop();
         _previewDebounce.Stop();
+        _progressLoading.Cancel();
 
         _hotkeys?.Disable();
         _pipMouseVisibility.Dispose();
@@ -409,6 +417,7 @@ public partial class MainWindow : Window
         _tray?.Dispose();
 
         if (Services.VideoActivity is { } activity) activity.MediaActivity -= OnMediaActivity;
+        DisposeProgress();
         Services.Dispose();
         _shutdown.TrySetResult();
     }
