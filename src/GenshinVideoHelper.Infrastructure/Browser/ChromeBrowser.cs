@@ -7,69 +7,87 @@ using GenshinVideoHelper.Core.Contracts;
 
 namespace GenshinVideoHelper.Infrastructure.Browser;
 
-public sealed class ChromeBrowser : IBrowserSession, IDisposable
+public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
 {
     private readonly string _profileDirectory;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(2) };
-    private readonly CdpClient _client = new();
+    private readonly CdpClient _client = new(reuseConnections: true);
     private Uri? _endpoint;
     private readonly SemaphoreSlim _lifecycle = new(1, 1);
     private readonly List<Process> _launchedProcesses = [];
     private bool _closing;
+    private readonly CancellationTokenSource _shutdown = new();
+    private Uri? _browserSocket;
+    private Process? _ownedBrowser;
+    private string? _failedEndpoint;
+    private long _retryEndpointAfter;
+    private Task? _closeTask;
 
     public ChromeBrowser(string profileDirectory) => _profileDirectory = profileDirectory;
 
-    public async Task<BrowserPage> OpenAsync(string videoUrl, CancellationToken token = default)
+    public async Task WarmupAsync(CancellationToken token = default)
     {
-        await _lifecycle.WaitAsync(token);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _shutdown.Token);
+        await _lifecycle.WaitAsync(linked.Token);
         try
         {
             ObjectDisposedException.ThrowIf(_closing, this);
-            return await OpenCoreAsync(videoUrl, token);
+            if (!await TryConnectAsync(linked.Token)) await LaunchAsync(linked.Token);
+            await GetBrowserProcessIdAsync(linked.Token);
         }
         finally { _lifecycle.Release(); }
     }
 
-    private async Task<BrowserPage> OpenCoreAsync(string videoUrl, CancellationToken token)
+    public async Task<BrowserPage> OpenAsync(string videoUrl, CancellationToken token = default)
     {
         var url = ValidateVideoUrl(videoUrl);
-        Directory.CreateDirectory(_profileDirectory);
-        if (await TryConnectAsync(token))
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _shutdown.Token);
+        await _lifecycle.WaitAsync(linked.Token);
+        try
         {
-            var browserSocket = await GetBrowserSocketAsync(token);
-            var reply = await _client.SendAsync(browserSocket, "Target.createTarget", new { url = url.AbsoluteUri }, token);
+            ObjectDisposedException.ThrowIf(_closing, this);
+            token = linked.Token;
+            if (!await TryConnectAsync(token)) await LaunchAsync(token);
+            var reply = await _client.SendAsync(await GetBrowserSocketAsync(token), "Target.createTarget",
+                new { url = url.AbsoluteUri, newWindow = true, background = true, windowState = "minimized" }, token);
             return await WaitForPageAsync(reply.GetProperty("targetId").GetString(), url.AbsoluteUri, token);
         }
+        finally { _lifecycle.Release(); }
+    }
 
-        var chrome = FindChrome() ?? throw new FileNotFoundException(
-            "未找到 Chrome，请先安装桌面版 Google Chrome。");
-        var startInfo = new ProcessStartInfo(chrome) { UseShellExecute = false };
+    private async Task LaunchAsync(CancellationToken token)
+    {
+        Directory.CreateDirectory(_profileDirectory);
+        var chrome = FindChrome() ?? throw new FileNotFoundException("未找到 Chrome，请先安装桌面版 Google Chrome。");
+        var startInfo = new ProcessStartInfo(chrome) { UseShellExecute = false,
+            WindowStyle = ProcessWindowStyle.Hidden };
         startInfo.ArgumentList.Add($"--user-data-dir={_profileDirectory}");
         startInfo.ArgumentList.Add("--remote-debugging-address=127.0.0.1");
         startInfo.ArgumentList.Add("--remote-debugging-port=0");
         startInfo.ArgumentList.Add("--no-first-run");
         startInfo.ArgumentList.Add("--no-default-browser-check");
-        startInfo.ArgumentList.Add("--new-window");
-        startInfo.ArgumentList.Add(url.AbsoluteUri);
+        startInfo.ArgumentList.Add("--no-startup-window");
+        startInfo.ArgumentList.Add("--autoplay-policy=no-user-gesture-required");
+        startInfo.ArgumentList.Add("--disable-background-timer-throttling");
+        startInfo.ArgumentList.Add("--disable-backgrounding-occluded-windows");
+        startInfo.ArgumentList.Add("--disable-renderer-backgrounding");
+        token.ThrowIfCancellationRequested();
         var launched = Process.Start(startInfo);
-        if (launched is not null) _launchedProcesses.Add(launched);
-
-        using var startupTimeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-        startupTimeout.CancelAfter(TimeSpan.FromSeconds(20));
+        if (launched is not null)
+        {
+            _ = launched.Handle;
+            lock (_launchedProcesses) _launchedProcesses.Add(launched);
+        }
+        using var startup = CancellationTokenSource.CreateLinkedTokenSource(token);
+        startup.CancelAfter(TimeSpan.FromSeconds(12));
         try
         {
-            while (true)
-            {
-                if (await TryConnectAsync(startupTimeout.Token)) return await WaitForPageAsync(null, url.AbsoluteUri, startupTimeout.Token);
-                await Task.Delay(200, startupTimeout.Token);
-            }
+            while (!await TryConnectAsync(startup.Token)) await Task.Delay(50, startup.Token);
+            await GetBrowserProcessIdAsync(startup.Token);
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
-        {
-            throw new TimeoutException("Chrome 启动超时。请关闭本工具的独立浏览器窗口后重试。");
-        }
+        { throw new TimeoutException("Chrome 启动超时，请重试开始跟随。"); }
     }
-
     private async Task<BrowserPage> WaitForPageAsync(string? targetId, string url, CancellationToken token)
     {
         VideoIdentity.TryParse(url, out var identity);
@@ -79,7 +97,7 @@ public sealed class ChromeBrowser : IBrowserSession, IDisposable
             var page = pages.FirstOrDefault(p => targetId is not null ? p.Id == targetId :
                 p.Url == url || (identity is not null && VideoIdentity.TryParse(p.Url, out var actual) && actual == identity));
             if (page is not null) return page;
-            await Task.Delay(100, token);
+            await Task.Delay(50, token);
         }
         throw new TimeoutException("视频页面打开超时，请重新开始跟随。");
     }
@@ -122,39 +140,57 @@ public sealed class ChromeBrowser : IBrowserSession, IDisposable
 
     public async Task<int> GetBrowserProcessIdAsync(CancellationToken token = default)
     {
+        token.ThrowIfCancellationRequested();
+        if (_ownedBrowser is { HasExited: false }) return _ownedBrowser.Id;
+        if (_endpoint is null && !await TryConnectAsync(token)) throw new IOException("专用 Chrome 尚未连接。");
         var result = await _client.SendAsync(await GetBrowserSocketAsync(token), "SystemInfo.getProcessInfo", new { }, token);
-        var browser = result.GetProperty("processInfo").EnumerateArray()
-            .First(item => item.GetProperty("type").GetString() == "browser");
-        return (int)browser.GetProperty("id").GetDouble();
+        var browser = result.GetProperty("processInfo").EnumerateArray().First(item => item.GetProperty("type").GetString() == "browser");
+        var owned = Process.GetProcessById((int)browser.GetProperty("id").GetDouble());
+        _ = owned.Handle; // Retain the verified process identity, including through exit/PID reuse.
+        _ownedBrowser?.Dispose();
+        _ownedBrowser = owned;
+        return owned.Id;
     }
 
     private async Task<Uri> GetBrowserSocketAsync(CancellationToken token)
     {
-        var version = await _http.GetFromJsonAsync<JsonElement>(new Uri(_endpoint!, "/json/version"), token);
-        return new Uri(version.GetProperty("webSocketDebuggerUrl").GetString()!);
+        if (_browserSocket is not null) return _browserSocket;
+        if (!await TryConnectAsync(token)) throw new IOException("专用 Chrome 已断开连接。");
+        return _browserSocket!;
     }
 
     private async Task<bool> TryConnectAsync(CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
+        if (_ownedBrowser is { HasExited: false } && _browserSocket is not null) return true;
+        string? fingerprint = null;
         try
         {
             var lines = await File.ReadAllLinesAsync(Path.Combine(_profileDirectory, "DevToolsActivePort"), token);
             if (lines.Length < 2 || !int.TryParse(lines[0], out var port) || port is < 1 or > 65535) return false;
+            fingerprint = port + lines[1].Trim();
+            if (_failedEndpoint == fingerprint && Environment.TickCount64 < _retryEndpointAfter) return false;
             var candidate = new Uri($"http://127.0.0.1:{port}");
-            var version = await _http.GetFromJsonAsync<JsonElement>(new Uri(candidate, "/json/version"), token);
+            using var probe = CancellationTokenSource.CreateLinkedTokenSource(token);
+            probe.CancelAfter(TimeSpan.FromMilliseconds(180));
+            var version = await _http.GetFromJsonAsync<JsonElement>(new Uri(candidate, "/json/version"), probe.Token);
             var socket = new Uri(version.GetProperty("webSocketDebuggerUrl").GetString()!);
-            if (socket.AbsolutePath != lines[1].Trim()) return false;
+            if (socket.Host != candidate.Host || socket.Port != port || socket.AbsolutePath != lines[1].Trim()) return false;
             _endpoint = candidate;
+            _browserSocket = socket;
+            _failedEndpoint = null;
             return true;
         }
         catch (Exception ex) when (ex is IOException or HttpRequestException or JsonException or
-                                  InvalidOperationException or UriFormatException or TaskCanceledException)
+                                  InvalidOperationException or UriFormatException or OperationCanceledException)
         {
             token.ThrowIfCancellationRequested();
+            _endpoint = null;
+            _browserSocket = null;
+            if (fingerprint is not null) { _failedEndpoint = fingerprint; _retryEndpointAfter = Environment.TickCount64 + 500; }
             return false;
         }
     }
-
     public static bool IsBilibiliUrl(string? value) => BilibiliUrl.IsBilibili(value);
     public static Uri ValidateVideoUrl(string? value) => BilibiliUrl.Validate(value);
 
@@ -169,48 +205,61 @@ public sealed class ChromeBrowser : IBrowserSession, IDisposable
         return paths.FirstOrDefault(File.Exists);
     }
 
-    // Close only the browser verified against this profile's DevTools session, or the
-    // process this instance launched with that exact profile. Never enumerate/kill Chrome by name.
-    public async Task CloseAsync()
+    // A retained process handle or a profile-verified DevTools session is required for termination.
+    public Task CloseAsync()
     {
+        if (_closeTask is not null) return _closeTask;
         _closing = true;
-        await _lifecycle.WaitAsync();
-        Process? owned = null;
+        _shutdown.Cancel();
+        return _closeTask = Task.Run(CloseCoreAsync);
+    }
+
+    private async Task CloseCoreAsync()
+    {
+        using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(2.1));
+        var entered = false;
         try
         {
-            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await _lifecycle.WaitAsync(budget.Token);
+            entered = true;
+            using var graceful = CancellationTokenSource.CreateLinkedTokenSource(budget.Token);
+            graceful.CancelAfter(TimeSpan.FromMilliseconds(600));
             try
             {
-                if (File.Exists(Path.Combine(_profileDirectory, "DevToolsActivePort")) && await TryConnectAsync(deadline.Token))
+                if (await TryConnectAsync(graceful.Token))
                 {
-                    owned = Process.GetProcessById(await GetBrowserProcessIdAsync(deadline.Token));
-                    _ = owned.Handle; // Keep this process identity even if Chrome exits or the PID gets reused.
-                    await _client.SendAsync(await GetBrowserSocketAsync(deadline.Token), "Browser.close", new { }, deadline.Token);
+                    await GetBrowserProcessIdAsync(graceful.Token);
+                    await _client.SendAsync(await GetBrowserSocketAsync(graceful.Token), "Browser.close", new { }, graceful.Token);
                 }
             }
             catch (Exception ex) when (ex is IOException or HttpRequestException or OperationCanceledException or
                 TimeoutException or InvalidOperationException or System.ComponentModel.Win32Exception or JsonException)
             { Debug.WriteLine($"Chrome graceful close: {ex.Message}"); }
 
-            var targets = _launchedProcesses.Concat(owned is null ? [] : new[] { owned });
-            foreach (var target in targets)
-            {
-                if (target.HasExited) continue;
-                using var exitDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-                try { await target.WaitForExitAsync(exitDeadline.Token); }
-                catch (OperationCanceledException)
-                {
-                    // A hung, positively identified helper browser is still part of this session.
-                    if (!target.HasExited) target.Kill(entireProcessTree: true);
-                    await target.WaitForExitAsync();
-                }
-            }
+            await Task.WhenAll(OwnedProcesses().Where(p => !p.HasExited).Select(p => p.WaitForExitAsync(budget.Token)));
         }
-        finally { owned?.Dispose(); _lifecycle.Release(); }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            foreach (var process in OwnedProcesses())
+            {
+                try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+                { Debug.WriteLine($"Chrome final close: {ex.Message}"); }
+            }
+            if (entered) _lifecycle.Release();
+        }
+    }
+    private Process[] OwnedProcesses()
+    {
+        lock (_launchedProcesses)
+            return _launchedProcesses.Concat(_ownedBrowser is null ? [] : new[] { _ownedBrowser }).DistinctBy(p => p.Id).ToArray();
     }
     public void Dispose()
     {
+        _client.Dispose();
         _http.Dispose();
+        _ownedBrowser?.Dispose();
         foreach (var process in _launchedProcesses) process.Dispose();
     }
 }

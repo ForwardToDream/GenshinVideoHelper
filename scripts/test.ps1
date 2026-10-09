@@ -1,10 +1,10 @@
-param([switch]$Browser, [switch]$Pip, [switch]$RenderUi, [switch]$Follow, [switch]$Preview, [switch]$Lifecycle, [switch]$Latency)
+param([switch]$Browser, [switch]$Pip, [switch]$RenderUi, [switch]$Follow, [switch]$Preview, [switch]$Lifecycle, [switch]$Latency, [switch]$Background)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 $taskProject = Join-Path $taskRoot 'tests/GenshinVideoHelper.Smoke/GenshinVideoHelper.Smoke.csproj'
 dotnet test (Join-Path $taskRoot 'GenshinVideoHelper.sln') -c Release
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-if ($Browser -or $Pip -or $Follow -or $Lifecycle -or $Preview -or $RenderUi -or $Latency) {
+if ($Browser -or $Pip -or $Follow -or $Lifecycle -or $Preview -or $RenderUi -or $Latency -or $Background) {
     dotnet build $taskProject -c Release
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
@@ -41,5 +41,10 @@ if ($Lifecycle) {
 
 if ($Latency) {
     dotnet run --project $taskProject -c Release --no-build -- --latency $taskRoot
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
+if ($Background) {
+    dotnet run --project $taskProject -c Release --no-build -- --background $taskRoot
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }

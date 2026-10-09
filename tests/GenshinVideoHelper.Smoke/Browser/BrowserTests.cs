@@ -29,13 +29,32 @@ internal static class BrowserTests
     public static async Task BrowserTestAsync(string root, bool headed)
     {
         await using var session = await ChromeFixture.StartAsync(root, headed);
-        var controller = new VideoController();
+        using var controller = new VideoController();
+        using (var shared = new CdpClient(reuseConnections: true))
+        {
+            var endpoint = new Uri(session.Page.WebSocketDebuggerUrl);
+            var delayed = shared.SendAsync(endpoint, "Runtime.evaluate", new { expression = "new Promise(r=>setTimeout(()=>r(17),200))", awaitPromise = true, returnByValue = true });
+            var immediate = shared.SendAsync(endpoint, "Runtime.evaluate", new { expression = "29", returnByValue = true });
+            Check((await immediate).GetProperty("result").GetProperty("value").GetInt32() == 29 &&
+                  (await delayed).GetProperty("result").GetProperty("value").GetInt32() == 17, "Concurrent CDP replies retain request identity");
+            var connection = shared.ConnectionId(endpoint);
+            using var cancel = new CancellationTokenSource(40);
+            var canceled = false;
+            try { await shared.SendAsync(endpoint, "Runtime.evaluate", new { expression = "new Promise(r=>setTimeout(()=>r(99),200))", awaitPromise = true }, cancel.Token); }
+            catch (OperationCanceledException) { canceled = true; }
+            var next = await shared.SendAsync(endpoint, "Runtime.evaluate", new { expression = "31", returnByValue = true });
+            Check(canceled && next.GetProperty("result").GetProperty("value").GetInt32() == 31 && shared.ConnectionId(endpoint) == connection,
+                "Canceling one CDP request preserves the connection and other replies");
+        }
+        var mediaEvent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        controller.MediaActivity += target => { if (target == session.Page.Id) mediaEvent.TrySetResult(); };
         VideoState? state = null;
         for (var i = 0; i < 40; i++)
         {
             try { state = await controller.ExecuteAsync(session.Page, new("status")); break; }
             catch (InvalidOperationException) { await Task.Delay(200); }
         }
+        await mediaEvent.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Check(state is { Paused: true, Duration: > 19 }, "Metadata and finite duration");
         Check(state!.VideoWidth == 640 && state.VideoHeight == 360, "Select main video instead of small secondary video");
         state = await controller.ExecuteAsync(session.Page, new("toggle"));
@@ -88,7 +107,7 @@ internal static class BrowserTests
         using var browser = new ChromeBrowser(session.ProfileDirectory);
         const string example = "https://www.bilibili.com/video/BV1hjgG6jEa6";
         await browser.OpenAsync(example);
-        var controller = new VideoController();
+        using var controller = new VideoController();
         string? lastError = null;
         BrowserPage? page = null;
         for (var attempt = 0; attempt < 40; attempt++)

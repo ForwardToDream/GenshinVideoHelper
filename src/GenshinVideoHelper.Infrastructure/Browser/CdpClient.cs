@@ -6,10 +6,25 @@ using GenshinVideoHelper.Core.Contracts;
 
 namespace GenshinVideoHelper.Infrastructure.Browser;
 
-/// <summary>A bounded, single-request CDP connection. Events may precede the reply.</summary>
-public sealed class CdpClient
+/// <summary>Bounded CDP requests, with optional persistent connections and event delivery.</summary>
+public sealed class CdpClient : IDisposable
 {
-    public async Task<JsonElement> SendAsync(Uri endpoint, string method, object parameters,
+    private readonly CdpConnections? _connections;
+    public CdpClient(bool reuseConnections = false)
+    {
+        if (reuseConnections) _connections = new();
+    }
+    public event Action<Uri, string, JsonElement>? EventReceived
+    {
+        add { if (_connections is not null) _connections.EventReceived += value; }
+        remove { if (_connections is not null) _connections.EventReceived -= value; }
+    }
+    public long ConnectionId(Uri endpoint) => _connections?.ConnectionId(endpoint) ?? 0;
+    public Task<JsonElement> SendAsync(Uri endpoint, string method, object parameters, CancellationToken cancellationToken = default) =>
+        _connections?.SendAsync(endpoint, method, parameters, cancellationToken) ?? SendOnceAsync(endpoint, method, parameters, cancellationToken);
+    public void Dispose() => _connections?.Dispose();
+
+    private async Task<JsonElement> SendOnceAsync(Uri endpoint, string method, object parameters,
         CancellationToken cancellationToken = default)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

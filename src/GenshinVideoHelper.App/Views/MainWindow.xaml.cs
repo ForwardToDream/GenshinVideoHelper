@@ -38,6 +38,7 @@ public partial class MainWindow : Window
     private VideoIdentity? _displayedIdentity;
     private BilibiliVideoInfo? _displayedInfo;
     private string? _displayedMessage;
+    private int _mediaQueued;
 
     public MainWindow() : this(AppServices.CreateDefault()) { }
 
@@ -69,6 +70,8 @@ public partial class MainWindow : Window
         StateChanged += OnWindowStateChanged;
         _poll.Tick += async (_, _) => await PollAsync();
         Services.Follow.Changed += DisplayFollow;
+        if (Services.VideoActivity is { } activity) activity.MediaActivity += OnMediaActivity;
+        Loaded += async (_, _) => { if (!_closing) await Services.WarmupAsync(); };
         Services.Preview.Changed += DisplayPreview;
         InitializeLibraries();
         _ready = true;
@@ -125,8 +128,19 @@ public partial class MainWindow : Window
         _tray = new TrayIconService(this, RestoreFromTray, Close);
     }
 
+    private void OnMediaActivity(string target)
+    {
+        if (_closing || Interlocked.Exchange(ref _mediaQueued, 1) != 0) return;
+        Dispatcher.BeginInvoke(async () =>
+        {
+            Interlocked.Exchange(ref _mediaQueued, 0);
+            if (!_closing && Services.Follow.Current.Page?.Id == target) await PollAsync();
+        });
+    }
+
     private void DisplayFollow(FollowSnapshot snapshot)
     {
+        _poll.Interval = TimeSpan.FromMilliseconds(snapshot.AutomaticPending ? 200 : 1000);
         FollowRetryButton.Visibility = snapshot.CanRetry ? Visibility.Visible : Visibility.Collapsed;
         OpenButton.IsEnabled = snapshot.Phase != FollowPhase.Opening;
         if (snapshot.Request?.Identity is { } identity && identity != _displayedIdentity)
@@ -156,6 +170,7 @@ public partial class MainWindow : Window
         if (_selectedInfo?.Bvid == identity.Bvid && !_selectedInfo.Episodes.Any(p => p.Number == identity.Part))
         { SetStatus($"此视频没有 P{identity.Part}，请选择有效分集。", true); return; }
         await Services.Follow.OpenAsync(identity);
+        await PollAsync();
     }
     private async void UrlInput_KeyDown(object sender, KeyEventArgs e)
     {
@@ -164,7 +179,7 @@ public partial class MainWindow : Window
         await OpenVideoAsync();
     }
     private void EpisodeRetry_Click(object sender, RoutedEventArgs e) => PrepareEpisodePreview(immediate: true, forceReload: true);
-    private void FollowRetry_Click(object sender, RoutedEventArgs e) => Services.Follow.Retry();
+    private async void FollowRetry_Click(object sender, RoutedEventArgs e) { Services.Follow.Retry(); await PollAsync(); }
     private async void EpisodeSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_ready || _updatingControls || EpisodeSelector.SelectedItem is not EpisodeInfo episode) return;
@@ -172,8 +187,8 @@ public partial class MainWindow : Window
     }
     private async void PreviousEpisode_Click(object sender, RoutedEventArgs e) => await MoveSelectedEpisodeAsync(-1);
     private async void NextEpisode_Click(object sender, RoutedEventArgs e) => await MoveSelectedEpisodeAsync(1);
-    private Task MoveEpisodeAsync(int direction) => Services.Follow.MoveEpisodeAsync(direction);
-    private Task NavigateActiveEpisodeAsync(int part) => Services.Follow.NavigateAsync(part);
+    private async Task MoveEpisodeAsync(int direction) { await Services.Follow.MoveEpisodeAsync(direction); await PollAsync(); }
+    private async Task NavigateActiveEpisodeAsync(int part) { await Services.Follow.NavigateAsync(part); await PollAsync(); }
     private Task PollAsync() => Services.Follow.PollAsync();
     private Task ControlAsync(VideoCommand command) => Services.Follow.ExecuteAsync(command);
     private Task TogglePipAsync() => ControlAsync(new("pip"));
@@ -346,6 +361,7 @@ public partial class MainWindow : Window
         if (_shutdownComplete) return;
         if (_closing) { e.Cancel = true; return; }
         _closing = true;
+        Hide();
         _ready = false;
         _poll.Stop();
         _previewDebounce.Stop();
@@ -386,6 +402,7 @@ public partial class MainWindow : Window
         _hotkeys?.Dispose();
         _tray?.Dispose();
 
+        if (Services.VideoActivity is { } activity) activity.MediaActivity -= OnMediaActivity;
         Services.Dispose();
         _shutdown.TrySetResult();
     }

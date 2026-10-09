@@ -6,15 +6,64 @@ using GenshinVideoHelper.Core.Contracts;
 
 namespace GenshinVideoHelper.Infrastructure.Browser;
 
-public sealed class VideoController : IVideoPlayer
+public sealed class VideoController : IVideoPlayer, IVideoActivitySource, IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string Script = LoadScript();
-    private readonly CdpClient _client = new();
+    private readonly CdpClient _client = new(reuseConnections: true);
+    private readonly SemaphoreSlim _monitoring = new(1, 1);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Uri, (long Connection, string Target)> _watched = new();
+    public event Action<string>? MediaActivity;
+    public VideoController() => _client.EventReceived += OnEvent;
+    private void OnEvent(Uri endpoint, string name, JsonElement data)
+    {
+        if (name == "Runtime.bindingCalled" && data.TryGetProperty("name", out var binding) &&
+            binding.GetString() == "__gvhMediaReady" && _watched.TryGetValue(endpoint, out var watched))
+            MediaActivity?.Invoke(watched.Target);
+    }
+    private async Task MonitorAsync(BrowserPage page, CancellationToken token)
+    {
+        var endpoint = new Uri(page.WebSocketDebuggerUrl);
+        await _monitoring.WaitAsync(token);
+        try
+        {
+            if (_watched.TryGetValue(endpoint, out var watched) && watched.Connection == _client.ConnectionId(endpoint)) return;
+            // Emulates page focus without activating any native browser window.
+            await _client.SendAsync(endpoint, "Emulation.setFocusEmulationEnabled", new { enabled = true }, token);
+            await _client.SendAsync(endpoint, "Runtime.enable", new { }, token);
+            await _client.SendAsync(endpoint, "Runtime.addBinding", new { name = "__gvhMediaReady" }, token);
+            await _client.SendAsync(endpoint, "Page.addScriptToEvaluateOnNewDocument", new { source = MediaObserver }, token);
+            _watched[endpoint] = (_client.ConnectionId(endpoint), page.Id);
+            await _client.SendAsync(endpoint, "Runtime.evaluate", new { expression = MediaObserver }, token);
+        }
+        finally { _monitoring.Release(); }
+    }
+    private const string MediaObserver = """
+        (() => {
+          if (window.__gvhObserving) return;
+          window.__gvhObserving = true;
+          let queued = false;
+          const notify = () => {
+            if (queued) return;
+            queued = true;
+            setTimeout(() => {
+              queued = false;
+              if (typeof window.__gvhMediaReady === 'function') window.__gvhMediaReady(location.href);
+            }, 40);
+          };
+          for (const name of ['DOMContentLoaded', 'loadedmetadata', 'loadeddata', 'canplay', 'playing',
+                              'pause', 'ended', 'emptied', 'durationchange', 'enterpictureinpicture', 'leavepictureinpicture'])
+            document.addEventListener(name, notify, true);
+          notify();
+        })()
+        """;
+
+    public void Dispose() { _client.EventReceived -= OnEvent; _client.Dispose(); }
 
     public async Task<VideoState> ExecuteAsync(BrowserPage page, VideoCommand command,
         CancellationToken cancellationToken = default)
     {
+        await MonitorAsync(page, cancellationToken);
         var expression = CreateExpression(command);
         var reply = await _client.SendAsync(new Uri(page.WebSocketDebuggerUrl), "Runtime.evaluate",
             new { expression, awaitPromise = true, returnByValue = true, userGesture = command.Action != "status" },

@@ -36,3 +36,14 @@ public interface ISettingsStore
     SettingsLoadResult Load();
     void Save(AppSettings settings);
 }
+
+public interface IBrowserWarmup
+{
+    Task WarmupAsync(CancellationToken token = default);
+}
+
+public interface IVideoActivitySource
+{
+    // Raised on a transport thread; the host dispatches to the application's state owner.
+    event Action<string>? MediaActivity;
+}
