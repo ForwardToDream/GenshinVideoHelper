@@ -2,6 +2,7 @@ namespace GenshinVideoHelper.Core.Settings;
 
 public sealed class AppSettings
 {
+    public Vision.VisionSettings Vision { get; set; } = new();
     public string VideoUrl { get; set; } = "";
     public string? SelectedVideoLibraryId { get; set; } = Library.VideoLibraryCatalog.DefaultLibraryId;
     public int SeekSeconds { get; set; } = 5;
@@ -15,6 +16,7 @@ public sealed class AppSettings
 
     public void Normalize()
     {
+        (Vision ??= new()).Normalize();
         ProgressCompletionPercent = Math.Clamp(ProgressCompletionPercent, 50, 100);
         if (!Enum.IsDefined(LogLevel)) LogLevel = Diagnostics.LogLevel.Info;
         SeekSeconds = Math.Clamp(SeekSeconds, 1, 60);

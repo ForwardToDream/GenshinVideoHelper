@@ -1,10 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <TargetFramework>net8.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../GenshinVideoHelper.Core/GenshinVideoHelper.Core.csproj" />
     <EmbeddedResource Include="Browser/VideoControl.js" />
+    <EmbeddedResource Include="Browser/VideoFrameCapture.js" />
+    <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.11.0.20250507" />
     <EmbeddedResource Include="Library/Data/*.json" LogicalName="GenshinVideoHelper.VideoLibraries.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

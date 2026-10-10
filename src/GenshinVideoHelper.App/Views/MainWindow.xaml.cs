@@ -77,6 +77,7 @@ public partial class MainWindow : Window
         Loaded += async (_, _) => { if (!_closing) await Services.WarmupAsync(); };
         Services.Preview.Changed += DisplayPreview;
         InitializeProgress();
+        InitializeVision();
         InitializeLibraries();
         _ready = true;
         _previewDebounce.Tick += async (_, _) => await LoadSelectedEpisodesAsync();
@@ -95,8 +96,9 @@ public partial class MainWindow : Window
         SettingsPage.Visibility = key == "Settings" ? Visibility.Visible : Visibility.Collapsed;
         HotkeysPage.Visibility = key == "Hotkeys" ? Visibility.Visible : Visibility.Collapsed;
         ProgressPage.Visibility = key == "Progress" ? Visibility.Visible : Visibility.Collapsed;
-        PageHeading.Text = key switch { "Settings" => "设置", "Hotkeys" => "快捷键", "Progress" => "进度", _ => "启动" };
-        PageDescription.Text = key switch { "Settings" => "调整播放节奏与浮窗。", "Hotkeys" => "查看控制说明，修改游戏中使用的组合键。", "Progress" => "每张地图跟到了哪里；只统计真正播放过的部分，可手动修正。", _ => "选择攻略，自动播放并进入左下角画中画。" };
+        VisionPage.Visibility = key == "Vision" ? Visibility.Visible : Visibility.Collapsed;
+        PageHeading.Text = key switch { "Vision" => "地图识别", "Settings" => "设置", "Hotkeys" => "快捷键", "Progress" => "进度", _ => "启动" };
+        PageDescription.Text = key switch { "Vision" => "在游戏小地图上标记指导视频的位置与可信视线。", "Settings" => "调整播放节奏与浮窗。", "Hotkeys" => "查看控制说明，修改游戏中使用的组合键。", "Progress" => "每张地图跟到了哪里；只统计真正播放过的部分，可手动修正。", _ => "选择攻略，自动播放并进入左下角画中画。" };
         if (key == "Progress") ShowProgressPage();
     }
 
@@ -136,6 +138,7 @@ public partial class MainWindow : Window
 
     private void OnMediaActivity(string target)
     {
+        if (Services.Follow.Current.Page?.Id == target) Services.Vision?.Invalidate();
         if (_closing || Interlocked.Exchange(ref _mediaQueued, 1) != 0) return;
         Dispatcher.BeginInvoke(async () =>
         {
@@ -147,6 +150,7 @@ public partial class MainWindow : Window
     private void DisplayFollow(FollowSnapshot snapshot)
     {
         DismissStaleLoginPrompt(snapshot);
+        UpdateVisionIntent();
         _poll.Interval = TimeSpan.FromMilliseconds(snapshot.AutomaticPending ? 200 : 1000);
         FollowRetryButton.Visibility = snapshot.CanRetry ? Visibility.Visible : Visibility.Collapsed;
         OpenButton.IsEnabled = snapshot.Phase != FollowPhase.Opening;
@@ -386,6 +390,7 @@ public partial class MainWindow : Window
         _loginPrompt?.Close();
         AppLog.Info("App", "开始退出。");
         Hide();
+        StopVisionUi();
         _ready = false;
         _poll.Stop();
         _previewDebounce.Stop();
@@ -429,6 +434,7 @@ public partial class MainWindow : Window
 
         if (Services.VideoActivity is { } activity) activity.MediaActivity -= OnMediaActivity;
         DisposeProgress();
+        _mapOverlay?.Dispose();
         Services.Dispose();
         _shutdown.TrySetResult();
     }

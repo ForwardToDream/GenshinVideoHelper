@@ -10,7 +10,9 @@ internal static class Program
         {
             var root = args.Length > 1 ? Path.GetFullPath(args[1]) : Directory.GetCurrentDirectory();
             TestArtifacts.SweepStale(root);
-            if (args.Contains("--login")) LoginTests.Run(root);
+            if (args.Contains("--vision-baseline")) VisionTests.Baseline(root);
+            else if (args.Contains("--vision")) VisionTests.Run(root);
+            else if (args.Contains("--login")) LoginTests.Run(root);
             else if (args.Contains("--render-ui")) RenderUi(root);
             else if (args.Contains("--browser")) BrowserTestAsync(root, headed: false).GetAwaiter().GetResult();
             else if (args.Contains("--pip")) PipTest(root);

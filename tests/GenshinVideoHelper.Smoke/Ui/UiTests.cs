@@ -170,9 +170,11 @@ internal static class UiTests
         var window = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { HotkeysEnabled = false }, TestArtifacts.PathFor(root, "ui-test-profile"), episodeFactory: PreviewService));
         Directory.CreateDirectory(Path.Combine(root, "artifacts"));
         Check(window.FindName("NavConnection") is null && window.FindName("NavPip") is null &&
-               ((Grid)window.FindName("PagesHost")).Children.Count == 4, "Start, progress, hotkeys and settings pages");
+               ((Grid)window.FindName("PagesHost")).Children.Count == 5, "Start, progress, vision, hotkeys and settings pages");
+        Check(window.Services.Settings.Vision.Enabled && window.Services.Settings.Vision.IntervalMs == 100, "Map recognition defaults to on at 100ms");
+        Check(window.FindName("GameWindowSelector") is null && window.Services.Vision is null, "No manual window selection or vision worker before following");
         Check(window.FindName("OtherPagesExpander") is null && window.FindName("PageSelector") is null, "Other-video-page section removed");
-        foreach (var (key, title) in new[] { ("Follow", "启动"), ("Progress", "进度"), ("Hotkeys", "快捷键"), ("Settings", "设置") })
+        foreach (var (key, title) in new[] { ("Follow", "启动"), ("Progress", "进度"), ("Vision", "地图识别"), ("Hotkeys", "快捷键"), ("Settings", "设置") })
         {
             ((RadioButton)window.FindName("Nav" + key)).IsChecked = true;
             Check(((TextBlock)window.FindName("PageHeading")).Text == title, "Navigate " + key);
@@ -274,7 +276,7 @@ internal static class UiTests
         Check(((TextBlock)missingWindow.FindName("StatusText")).Text.Contains("不存在") && ((ComboBox)missingWindow.FindName("GuideVideoSelector")).Items.Count == 0 && ((TextBox)missingWindow.FindName("UrlInput")).IsEnabled, "Missing library preserves manual input and reports error");
         Capture(missingWindow, root, "ui-library-missing-compact.png", 860, 600);
         missingWindow.Close();
-        Console.WriteLine("WPF UI: four panels, progress editing, default/minimum sizes, full-row Start below episodes, part boundaries, long title and state preservation passed.");
+        Console.WriteLine("WPF UI: five panels, progress editing, default/minimum sizes, full-row Start below episodes, part boundaries, long title and state preservation passed.");
     }
 
 }

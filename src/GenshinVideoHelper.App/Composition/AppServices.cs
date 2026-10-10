@@ -27,6 +27,10 @@ public sealed class AppServices : IDisposable
     private bool _warmupStarted;
     public IVideoActivitySource? VideoActivity { get; }
     public IBilibiliAccountService? VideoAccount { get; }
+    private readonly Core.Vision.IVideoFrameSource? _frames;
+    public MinimapFollowCoordinator? Vision { get; private set; }
+    public MinimapFollowCoordinator? EnsureVision() => Vision ??= _frames is null ? null :
+        new(_frames, new GameWindowCapture(), new Infrastructure.Vision.MinimapAnalyzer());
     public AppSettings Settings { get; }
     public ISettingsStore? SettingsStore { get; }
     public string? LoadWarning { get; }
@@ -67,6 +71,7 @@ public sealed class AppServices : IDisposable
         // A previewed video is known before it is ever followed, so its parts can be shown and pre-marked.
         Preview.Changed += preview => { if (preview.Info is { } info) Progress.Describe(info); };
         if (video is null) { var concrete = new VideoController(); video = concrete; _ownedVideo = concrete; }
+        _frames = (video as VideoController)?.FrameSource;
         VideoActivity = video as IVideoActivitySource;
         VideoAccount = video as IBilibiliAccountService;
         Follow = new(Browser, video, episodes, Pip, _cache, progress: Progress);
@@ -105,7 +110,7 @@ public sealed class AppServices : IDisposable
     {
         // Browser shutdown must not queue behind pending page requests.
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
-        var work = Task.WhenAll(_warmup, Follow.DrainAsync(), Preview.DrainAsync(), Browser.CloseAsync());
+        var work = Task.WhenAll(Vision?.StopAsync() ?? Task.CompletedTask, _warmup, Follow.DrainAsync(), Preview.DrainAsync(), Browser.CloseAsync());
         try
         {
             await work.WaitAsync(TimeSpan.FromSeconds(2.5));
@@ -115,6 +120,7 @@ public sealed class AppServices : IDisposable
     }
     public void Dispose()
     {
+        Vision?.Dispose();
         Follow.Dispose(); Preview.Dispose(); Pip.Dispose();
         _ownedVideo?.Dispose(); _ownedBrowser?.Dispose(); _ownedEpisodes?.Dispose();
     }

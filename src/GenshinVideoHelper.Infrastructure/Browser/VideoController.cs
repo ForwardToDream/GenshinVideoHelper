@@ -14,6 +14,7 @@ public sealed class VideoController : IVideoPlayer, IVideoActivitySource, IBilib
     private readonly CdpClient _client = new(reuseConnections: true);
     private readonly SemaphoreSlim _monitoring = new(1, 1);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Uri, (long Connection, string Target)> _watched = new();
+    public Core.Vision.IVideoFrameSource FrameSource => new VideoFrameSource(_client);
     public event Action<string>? MediaActivity;
     public VideoController() => _client.EventReceived += OnEvent;
     private void OnEvent(Uri endpoint, string name, JsonElement data)
