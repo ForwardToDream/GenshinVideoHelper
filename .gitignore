@@ -7,6 +7,7 @@ artifacts/
 node_modules/
 reference/
 **/AGENTS.md
+experiments/
 
 GenshinVideoHelper.settings.json
 GenshinVideoHelper.settings.json.*
