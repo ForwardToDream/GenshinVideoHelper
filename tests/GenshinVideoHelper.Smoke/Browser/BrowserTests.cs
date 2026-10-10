@@ -99,6 +99,70 @@ internal static class BrowserTests
         catch (IOException) { closedReported = true; }
         Check(closedReported, "Report closed tab");
         Console.WriteLine("Closed-tab recovery error passed.");
+        await TestAccountProbeAsync(root);
+    }
+
+    private static async Task TestAccountProbeAsync(string root)
+    {
+        await using var fixture = await ChromeFixture.StartAsync(root, headed: false);
+        using var cdp = new CdpClient(reuseConnections: true);
+        using var controller = new VideoController();
+        var endpoint = new Uri(fixture.Page.WebSocketDebuggerUrl);
+        var served = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        cdp.EventReceived += (sender, name, data) =>
+        {
+            if (name != "Fetch.requestPaused") return;
+            _ = RespondAsync(data.GetProperty("requestId").GetString()!);
+        };
+        async Task RespondAsync(string id)
+        {
+            try
+            {
+                await cdp.SendAsync(endpoint, "Fetch.fulfillRequest", new
+                {
+                    requestId = id, responseCode = 200,
+                    responseHeaders = new[] { new { name = "Content-Type", value = "text/html" } },
+                    body = Convert.ToBase64String(Encoding.UTF8.GetBytes("<!doctype html><title>Account fixture</title>"))
+                });
+                served.TrySetResult();
+            }
+            catch (Exception ex) { served.TrySetException(ex); }
+        }
+        await cdp.SendAsync(endpoint, "Fetch.enable", new { patterns = new[] { new { urlPattern = "*", resourceType = "Document" } } });
+        const string url = "https://www.bilibili.com/video/BV1hjgG6jEa6/?p=3";
+        await cdp.SendAsync(endpoint, "Page.navigate", new { url });
+        await served.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var page = fixture.Page with { Url = url };
+        for (var i = 0; i < 30; i++)
+        {
+            var ready = await cdp.SendAsync(endpoint, "Runtime.evaluate", new { expression = "location.href === '" + url + "' && document.readyState !== 'loading'", returnByValue = true });
+            if (ready.GetProperty("result").GetProperty("value").GetBoolean()) break;
+            await Task.Delay(50);
+        }
+        await cdp.SendAsync(endpoint, "Fetch.disable", new { });
+        async Task Script(string expression) => _ = await cdp.SendAsync(endpoint, "Runtime.evaluate", new { expression, returnByValue = true });
+        await Script("window.fetch=async()=>({ok:true,json:async()=>({code:-101,data:{isLogin:false}})})");
+        var state = await controller.ReadAccountAsync(page);
+        Check(state.LoggedIn == false && state.Url == url && state.VideoHeight == 0, "Anonymous account detection works before video loads");
+        await Script("window.fetch=async()=>({ok:true,json:async()=>({code:0,data:{isLogin:true,uname:'not returned'}})})");
+        Check((await controller.ReadAccountAsync(page)).LoggedIn == true, "Authenticated account detected in current page session");
+        await Script("window.fetch=async()=>({ok:true,json:async()=>({code:-412})})");
+        Check((await controller.ReadAccountAsync(page)).LoggedIn is null, "Site failure remains unknown, never anonymous");
+        await Script("window.fetch=async()=>{throw new Error('offline')}");
+        Check((await controller.ReadAccountAsync(page)).LoggedIn is null, "Network failure does not cause a login prompt");
+        await Script("window.player={requestQuality:async q=>{window.qualityRequest=q;throw new Error('Permission denied')}}");
+        var rejected = false;
+        try { await controller.RequestHighQualityAsync(page); } catch (InvalidOperationException) { rejected = true; }
+        Check(rejected, "Quality request rejection is awaited and reported, not claimed successful");
+        await Script("window.player={requestQuality:async q=>{window.qualityRequest=q}};");
+        await controller.RequestHighQualityAsync(page);
+        var requested = await cdp.SendAsync(endpoint, "Runtime.evaluate", new { expression = "window.qualityRequest", returnByValue = true });
+        Check(requested.GetProperty("result").GetProperty("value").GetInt32() == 80 && (await controller.ReadAccountAsync(page)).VideoHeight == 0,
+            "1080p requested without inventing decoded resolution");
+        await Script("window.fetch=(_,options)=>new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new Error('aborted'))))");
+        var started = Stopwatch.GetTimestamp();
+        Check((await controller.ReadAccountAsync(page)).LoggedIn is null && Stopwatch.GetElapsedTime(started).TotalSeconds < 3.5, "Account HTTP request has a short bounded timeout");
+        Console.WriteLine("Chrome account probe: anonymous, logged-in, failures, timeout and denied quality passed.");
     }
 
     public static async Task BilibiliTestAsync(string root, bool headed = false, nint helperWindow = default)

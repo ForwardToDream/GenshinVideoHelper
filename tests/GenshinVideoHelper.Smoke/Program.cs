@@ -10,7 +10,8 @@ internal static class Program
         {
             var root = args.Length > 1 ? Path.GetFullPath(args[1]) : Directory.GetCurrentDirectory();
             TestArtifacts.SweepStale(root);
-            if (args.Contains("--render-ui")) RenderUi(root);
+            if (args.Contains("--login")) LoginTests.Run(root);
+            else if (args.Contains("--render-ui")) RenderUi(root);
             else if (args.Contains("--browser")) BrowserTestAsync(root, headed: false).GetAwaiter().GetResult();
             else if (args.Contains("--pip")) PipTest(root);
             else if (args.Contains("--bilibili")) BilibiliTestAsync(root).GetAwaiter().GetResult();

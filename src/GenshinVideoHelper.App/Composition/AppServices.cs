@@ -26,6 +26,7 @@ public sealed class AppServices : IDisposable
     private Task? _closing;
     private bool _warmupStarted;
     public IVideoActivitySource? VideoActivity { get; }
+    public IBilibiliAccountService? VideoAccount { get; }
     public AppSettings Settings { get; }
     public ISettingsStore? SettingsStore { get; }
     public string? LoadWarning { get; }
@@ -67,6 +68,7 @@ public sealed class AppServices : IDisposable
         Preview.Changed += preview => { if (preview.Info is { } info) Progress.Describe(info); };
         if (video is null) { var concrete = new VideoController(); video = concrete; _ownedVideo = concrete; }
         VideoActivity = video as IVideoActivitySource;
+        VideoAccount = video as IBilibiliAccountService;
         Follow = new(Browser, video, episodes, Pip, _cache, progress: Progress);
     }
 

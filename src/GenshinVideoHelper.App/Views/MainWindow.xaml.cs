@@ -146,6 +146,7 @@ public partial class MainWindow : Window
 
     private void DisplayFollow(FollowSnapshot snapshot)
     {
+        DismissStaleLoginPrompt(snapshot);
         _poll.Interval = TimeSpan.FromMilliseconds(snapshot.AutomaticPending ? 200 : 1000);
         FollowRetryButton.Visibility = snapshot.CanRetry ? Visibility.Visible : Visibility.Collapsed;
         OpenButton.IsEnabled = snapshot.Phase != FollowPhase.Opening;
@@ -178,7 +179,10 @@ public partial class MainWindow : Window
         if (_selectedInfo?.Bvid == identity.Bvid && !_selectedInfo.Episodes.Any(p => p.Number == identity.Part))
         { SetStatus($"此视频没有 P{identity.Part}，请选择有效分集。", true); return; }
         AppLog.Info("App", $"用户开始跟随 {identity.Bvid} P{identity.Part}。");
+        var loginIntent = ++_loginIntent;
         await Services.Follow.OpenAsync(identity);
+        if (loginIntent == _loginIntent && Services.Follow.Session.Current is { } request && request.Identity == identity && request.TargetId.Length > 0)
+            _ = CheckLoginAsync(request);
         await PollAsync();
     }
     private async void UrlInput_KeyDown(object sender, KeyEventArgs e)
@@ -379,6 +383,7 @@ public partial class MainWindow : Window
         if (_shutdownComplete) return;
         if (_closing) { e.Cancel = true; return; }
         _closing = true;
+        _loginPrompt?.Close();
         AppLog.Info("App", "开始退出。");
         Hide();
         _ready = false;

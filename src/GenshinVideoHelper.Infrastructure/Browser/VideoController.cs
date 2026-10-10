@@ -7,7 +7,7 @@ using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.Infrastructure.Browser;
 
-public sealed class VideoController : IVideoPlayer, IVideoActivitySource, IDisposable
+public sealed class VideoController : IVideoPlayer, IVideoActivitySource, IBilibiliAccountService, IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string Script = LoadScript();
@@ -86,6 +86,57 @@ public sealed class VideoController : IVideoPlayer, IVideoActivitySource, IDispo
         return value.Deserialize<VideoState>(JsonOptions)
                ?? throw new InvalidOperationException("无法读取视频状态。");
     }
+
+    public async Task<BilibiliAccountState> ReadAccountAsync(BrowserPage page, CancellationToken token = default)
+    {
+        var value = await EvaluateAccountAsync(page, AccountScript, token);
+        return value.Deserialize<BilibiliAccountState>(JsonOptions)
+            ?? throw new InvalidOperationException("无法读取登录状态。");
+    }
+
+    public async Task RequestHighQualityAsync(BrowserPage page, CancellationToken token = default) =>
+        _ = await EvaluateAccountAsync(page, """
+        (async () => {
+          if (location.hostname !== 'www.bilibili.com') return false;
+          const v = [...document.querySelectorAll('video')].sort((a,b) => b.videoWidth*b.videoHeight-a.videoWidth*a.videoHeight)[0];
+          if (v?.videoHeight >= 1080) return true;
+          if (typeof window.player?.requestQuality !== 'function') return false;
+          await Promise.race([window.player.requestQuality(80), new Promise((_,reject) => setTimeout(() => reject(new Error('QUALITY_TIMEOUT')), 2500))]);
+          return true;
+        })()
+        """, token);
+
+    private async Task<JsonElement> EvaluateAccountAsync(BrowserPage page, string expression, CancellationToken token)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(4));
+        var reply = await _client.SendAsync(new Uri(page.WebSocketDebuggerUrl), "Runtime.evaluate",
+            new { expression, awaitPromise = true, returnByValue = true }, timeout.Token);
+        if (reply.TryGetProperty("exceptionDetails", out _)) throw new InvalidOperationException("登录或画质检测暂不可用。");
+        return reply.GetProperty("result").GetProperty("value");
+    }
+
+    private const string AccountScript = """
+        (async () => {
+          let loggedIn = null;
+          if (location.hostname === 'www.bilibili.com') {
+            const abort = new AbortController();
+            const timer = setTimeout(() => abort.abort(), 2000);
+            try {
+              const response = await fetch('https://api.bilibili.com/x/web-interface/nav', {credentials:'include', cache:'no-store', signal:abort.signal});
+              if (response.ok) {
+                const data = await response.json();
+                if ((data.code === 0 || data.code === -101) && typeof data.data?.isLogin === 'boolean') loggedIn = data.data.isLogin;
+                else if (data.code === -101) loggedIn = false;
+              }
+            } catch {} finally { clearTimeout(timer); }
+          }
+          const video = [...document.querySelectorAll('video')].sort((a,b) =>
+            (b === document.pictureInPictureElement ? 1e12 : b.videoWidth*b.videoHeight) -
+            (a === document.pictureInPictureElement ? 1e12 : a.videoWidth*a.videoHeight))[0];
+          return {url:location.href, loggedIn, videoWidth:video?.videoWidth ?? 0, videoHeight:video?.videoHeight ?? 0};
+        })()
+        """;
 
     public static string CreateExpression(VideoCommand command) =>
         Script.Replace("__COMMAND__", JsonSerializer.Serialize(command, JsonOptions), StringComparison.Ordinal);

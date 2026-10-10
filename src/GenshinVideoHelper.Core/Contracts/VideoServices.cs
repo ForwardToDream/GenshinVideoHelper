@@ -55,3 +55,16 @@ public interface IVideoActivitySource
     // Raised on a transport thread; the host dispatches to the application's state owner.
     event Action<string>? MediaActivity;
 }
+
+public sealed record BilibiliAccountState(string Url, bool? LoggedIn, int VideoWidth, int VideoHeight);
+
+public interface IBilibiliAccountService
+{
+    Task<BilibiliAccountState> ReadAccountAsync(BrowserPage page, CancellationToken token = default);
+    Task RequestHighQualityAsync(BrowserPage page, CancellationToken token = default);
+}
+
+public interface IBrowserWindow
+{
+    Task ShowAsync(BrowserPage page, CancellationToken token = default);
+}

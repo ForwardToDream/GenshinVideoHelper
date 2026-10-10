@@ -8,7 +8,7 @@ using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.Infrastructure.Browser;
 
-public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
+public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IBrowserWindow, IDisposable
 {
     private readonly string _profileDirectory;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(2) };
@@ -116,6 +116,17 @@ public sealed class ChromeBrowser : IBrowserSession, IBrowserWarmup, IDisposable
         }
         AppLog.Warn("Chrome", $"新页面 {targetId} 未出现在页面列表中：{url}");
         throw new TimeoutException("视频页面打开超时，请重新开始跟随。");
+    }
+
+    // Called only after the user chooses to log in.
+    public async Task ShowAsync(BrowserPage page, CancellationToken token = default)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _shutdown.Token);
+        var socket = await GetBrowserSocketAsync(linked.Token);
+        var window = await _client.SendAsync(socket, "Browser.getWindowForTarget", new { targetId = page.Id }, linked.Token);
+        await _client.SendAsync(socket, "Browser.setWindowBounds",
+            new { windowId = window.GetProperty("windowId").GetInt32(), bounds = new { windowState = "normal" } }, linked.Token);
+        await _client.SendAsync(new Uri(page.WebSocketDebuggerUrl), "Page.bringToFront", new { }, linked.Token);
     }
 
     public async Task NavigateAsync(BrowserPage page, VideoIdentity identity, CancellationToken token = default)
