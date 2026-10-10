@@ -156,11 +156,11 @@ internal static class UiTests
         var reverseRow = rows.Single(item => (HotkeyAction)item.GetType().GetProperty("Action")!.GetValue(item)! == HotkeyAction.ReversePipVisibility);
         reverseRow.GetType().GetProperty("Keys")!.SetValue(reverseRow, "F8");
         Invoke(window, "SaveBindings_Click", window, new RoutedEventArgs());
-        Check(settings.Hotkeys[HotkeyAction.ReversePipVisibility] == "F8", "Reversal row saves a single key through normal binding editor");
+        Check(settings.Hotkeys[HotkeyAction.ReversePipVisibility] == "F8", "Visibility-mode row saves a single key through normal binding editor");
         Invoke(window, "ResetBindings_Click", window, new RoutedEventArgs());
         Check(settings.Hotkeys[HotkeyAction.NextEpisode] == "Ctrl+Shift+F8", "Filling defaults does not apply until saved");
         Invoke(window, "SaveBindings_Click", window, new RoutedEventArgs());
-        Check(settings.Hotkeys[HotkeyAction.NextEpisode] == "Alt+Right" && settings.Hotkeys[HotkeyAction.ReversePipVisibility] == "~", "Default reset is applied on save including hold key");
+        Check(settings.Hotkeys[HotkeyAction.NextEpisode] == "Alt+Right" && settings.Hotkeys[HotkeyAction.ReversePipVisibility] == "~", "Default reset is applied on save including mode key");
         ((TextBlock)window.FindName("BindingStatus")).Text = "下一分集：Alt+2 与另一项绑定重复。请修改后再保存。";
     }
 
@@ -248,7 +248,7 @@ internal static class UiTests
         var reverseBox = GetField<TextBox>(window, "_capturingBox")!;
         var tildeKey = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window)!, 0, Key.Oem3) { RoutedEvent = Keyboard.PreviewKeyDownEvent };
         Invoke(window, "Binding_PreviewKeyDown", reverseBox, tildeKey);
-        Check(tildeKey.Handled && reverseBox.Text == "~" && !reverseBox.IsReadOnly && GetField<TextBox>(window, "_capturingBox") is null, "Physical tilde recording produces a single-key reversal binding");
+        Check(tildeKey.Handled && reverseBox.Text == "~" && !reverseBox.IsReadOnly && GetField<TextBox>(window, "_capturingBox") is null, "Physical tilde recording produces a single-key mode binding");
         var hotkeysPage = (Grid)window.FindName("HotkeysPage");
         window.Width = 860;
         window.Height = 600;

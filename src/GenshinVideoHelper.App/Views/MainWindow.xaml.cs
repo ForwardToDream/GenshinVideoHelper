@@ -52,7 +52,7 @@ public partial class MainWindow : Window
         Resources["ProgressLookup"] = _progressLookup = new(services.Progress, () => _selectedInfo?.Bvid);
         InitializeComponent();
         UrlInput.Text = _settings.VideoUrl;
-        ConfigPathText.Text = "配置文件：根目录 GenshinVideoHelper.settings.json";
+        ConfigPathText.Text = "数据目录：exe 同目录的 .gvh（config.json、progress.json、logs、Chrome）";
         if (Services.LoadWarning is not null) SetStatus(Services.LoadWarning, true);
         PipWidthSlider.Value = _settings.PipWidth;
         PipWidthLabel.Text = $"{_settings.PipWidth} px";
@@ -274,6 +274,14 @@ public partial class MainWindow : Window
     {
         switch (action)
         {
+            case HotkeyAction.ReversePipVisibility:
+                SetStatus(_pipMouseVisibility.CycleMode() ? _pipMouseVisibility.Mode switch
+                {
+                    PipVisibilityMode.AlwaysVisible => "画中画已锁定显示。",
+                    PipVisibilityMode.AlwaysHidden => "画中画和状态横条已一起隐藏。",
+                    _ => "画中画使用鼠标避让：靠近隐藏，离开显示。"
+                } : "请先开启画中画。");
+                break;
             case HotkeyAction.TogglePlayback: await ControlAsync(new("toggle")); break;
             case HotkeyAction.SeekBackward: await ControlAsync(new("seek", -_settings.SeekSeconds)); break;
             case HotkeyAction.SeekForward: await ControlAsync(new("seek", _settings.SeekSeconds)); break;
@@ -327,13 +335,11 @@ public partial class MainWindow : Window
     private void ApplyHotkeys()
     {
         if (_editingBindings) return;
-        HotkeyGesture.TryParse(_settings.Hotkeys[HotkeyAction.ReversePipVisibility], out var reversal, allowUnmodified: true);
-        _pipMouseVisibility.SetReversalBinding(_settings.HotkeysEnabled ? reversal : null);
         if (_settings.HotkeysEnabled && _hotkeys is not null)
         {
             var conflicts = _hotkeys.Enable(_settings.Hotkeys);
             HotkeyStatus.Text = conflicts.Count == 0 ? "快捷键已启用" :
-                $"已启用 {_hotkeys.RegisteredCount + 1}/9 项快捷键。被占用：{string.Join("；", conflicts)}。可使用面板按钮。";
+                $"已启用 {_hotkeys.RegisteredCount}/9 项快捷键。被占用：{string.Join("；", conflicts)}。可使用面板按钮。";
         }
         else { _hotkeys?.Disable(); HotkeyStatus.Text = _hotkeys is null && _settings.HotkeysEnabled ? "启动后注册快捷键" : "快捷键已停用"; }
     }

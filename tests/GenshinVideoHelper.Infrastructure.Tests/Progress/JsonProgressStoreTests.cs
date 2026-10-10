@@ -87,6 +87,9 @@ public sealed class JsonProgressStoreTests : IDisposable
     [InlineData("null")]
     [InlineData("{\"Version\":99,\"Videos\":{}}")]
     [InlineData("{\"Videos\":{\"BV1hjgG6jEa6\":{\"Episodes\":[{\"Segments\":[[1,2,3]]}]}}}")]
+    [InlineData("{\"Videos\":{\"BV1hjgG6jEa6\":{\"Episodes\":[{\"Segments\":[[\"bad\",2]]}]}}}")]
+    [InlineData("{\"Videos\":{\"BV1hjgG6jEa6\":{\"Episodes\":[{\"Segments\":[[null,2]]}]}}}")]
+    [InlineData("{\"Videos\":{\"BV1hjgG6jEa6\":{\"Episodes\":[{\"Segments\":[[{},2]]}]}}}")]
     public void Load_UnreadableFile_StartsEmptyAndKeepsACopyBeforeAnySave(string contents)
     {
         Directory.CreateDirectory(_folder);

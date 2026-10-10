@@ -66,13 +66,6 @@ public sealed class JsonSettingsStoreTests : IDisposable
         Assert.Equal("", new JsonSettingsStore(PathFor()).Load().Settings.VideoUrl);
     }
 
-    [Fact]
-    public void FindApplicationRoot_PublishedSubdirectory_ResolvesByLauncher()
-    {
-        Directory.CreateDirectory(_folder);
-        File.WriteAllText(PathFor("start.cmd"), "fixture");
-        Assert.Equal(_folder, ApplicationPaths.FindApplicationRoot(Path.Combine(_folder, "artifacts", "GenshinVideoHelper")));
-    }
 
     public void Dispose()
     {

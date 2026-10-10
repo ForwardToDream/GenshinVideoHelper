@@ -24,7 +24,7 @@ public partial class MainWindow
             HotkeyAction.TogglePip => "开启或关闭浏览器浮窗",
             HotkeyAction.PlacePip => "同时应用设置的浮窗宽度",
             HotkeyAction.ToggleMute => "仅影响当前视频",
-            HotkeyAction.ReversePipVisibility => "按住反转隐藏，松开恢复；仅已开启的浮窗生效",
+            HotkeyAction.ReversePipVisibility => "按一下切换：锁定显示 → 强制隐藏 → 鼠标避让",
             _ => "控制当前选中的视频"
         };
         public string Keys { get; set; } = keys;
@@ -49,7 +49,6 @@ public partial class MainWindow
     {
         _editingBindings = true;
         _hotkeys?.Disable();
-        _pipMouseVisibility.SetReversalBinding(null);
         HotkeyStatus.Text = "正在编辑绑定，全局快捷键暂时停用。离开输入框后恢复已保存的绑定。";
     }
 
@@ -94,7 +93,7 @@ public partial class MainWindow
         var keyName = virtualKey == 0xC0 ? "~" : virtualKey is >= 0x30 and <= 0x39 or >= 0x41 and <= 0x5A ? ((char)virtualKey).ToString() : key switch { Key.Return => "Enter", Key.Back => "Backspace", Key.Prior => "PageUp", Key.Next => "PageDown", _ => key.ToString() };
         parts.Add(keyName);
         if (!HotkeyGesture.TryParse(string.Join('+', parts), out var gesture, allowUnmodified: ((ShortcutRow)_capturingBox!.DataContext).Action == HotkeyAction.ReversePipVisibility))
-        { BindingStatus.Text = "此按键不受支持。反转项可用单键或组合键，其他项需要修饰键加按键。"; return; }
+        { BindingStatus.Text = "此按键不受支持。显隐模式项可用单键或组合键，其他项需要修饰键加按键。"; return; }
         _capturingBox!.SetCurrentValue(TextBox.TextProperty, gesture.Text);
         _capturingBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
         _capturingBox.IsReadOnly = false;

@@ -249,7 +249,7 @@
          <TextBlock Text="全局快捷键" Style="{StaticResource CardTitle}" />
          <CheckBox x:Name="HotkeysCheckbox" Content="启用全局快捷键" Click="Hotkeys_Click" />
          <TextBlock x:Name="HotkeyStatus" Text="启动后注册快捷键" Foreground="{StaticResource AccentBrush}" TextWrapping="Wrap" Margin="0,11,0,0" />
-         <TextBlock Text="修改组合键后点击“保存绑定”。支持 Ctrl、Alt、Shift、Win 加字母、数字、方向键或 F1–F24；点击“录入”可直接按键，Esc 取消。反转项支持单键（~ / 反引号键等），按住生效、松开恢复。编辑期间暂时停用全局快捷键。" Style="{StaticResource SecondaryText}" Margin="0,12,0,16" />
+         <TextBlock Text="修改组合键后点击“保存绑定”。支持 Ctrl、Alt、Shift、Win 加字母、数字、方向键或 F1–F24；点击“录入”可直接按键，Esc 取消。显隐模式支持单键（~ / 反引号键等），按一下切换，长按不重复。编辑期间暂时停用全局快捷键。" Style="{StaticResource SecondaryText}" Margin="0,12,0,16" />
          <ItemsControl x:Name="HotkeyRows"><ItemsControl.ItemTemplate><DataTemplate>
           <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="180" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
            <StackPanel Margin="0,0,15,0"><TextBlock Text="{Binding Title}" /><TextBlock Text="{Binding Description}" Style="{StaticResource SecondaryText}" FontSize="11" /></StackPanel>

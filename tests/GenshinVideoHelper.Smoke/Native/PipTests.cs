@@ -57,14 +57,28 @@ internal static class PipTests
                 blocker.Close();
                 hotkeys.Disable();
             }
+            var reservedMode = RegisterHotKey(handle, 0x99AB, 0x4000, 0xC0);
+            try
+            {
+                Check(reservedMode, "Reserve the single mode key for the conflict test");
+                var blocked = hotkeys.Enable();
+                Check(blocked.Any(label => label.Contains("显隐模式") && label.Contains("~")) &&
+                    !hotkeys.IsRegistered(HotkeyAction.ReversePipVisibility) && hotkeys.RegisteredCount == 8,
+                    "A conflicting tilde reports exactly eight available actions");
+            }
+            finally
+            {
+                hotkeys.Disable();
+                if (reservedMode) UnregisterHotKey(handle, 0x99AB);
+            }
             var conflicts = hotkeys.Enable();
             Check(hotkeys.RegisteredCount > 0, "At least one hotkey registered");
             if (conflicts.Count > 0) Console.WriteLine("Unavailable hotkeys: " + string.Join("; ", conflicts));
             hotkeys.Disable();
             hotkeys.Enable();
             Console.WriteLine("Hotkey registration, release and re-registration passed.");
-            // Async work does not depend on this off-screen WPF window's dispatcher.
-            Task.Run(async () =>
+            // The native PiP companion is a WPF window; keep its lifetime on the UI dispatcher.
+            var work = helper.Dispatcher.InvokeAsync(async () =>
             {
                 if (example)
                 {
@@ -111,11 +125,15 @@ internal static class PipTests
                 var margin = (int)Math.Round(20 * GetDpiForWindow(handle) / 96d);
                 Check(Math.Abs(bounds.Left - info.Work.Left - margin) <= 3, "PiP left margin");
                 Check(Math.Abs(bounds.Bottom - info.Work.Bottom + margin) <= 3, "PiP bottom margin");
-                await TestMouseVisibilityAsync(session, pid, handle, controller);
+                await TestMouseVisibilityAsync(session, pid, handle, controller, hotkeys, root);
                 state = await controller.ExecuteAsync(session.Page, new("pip"));
                 Check(!state.PictureInPicture, "Exit PiP");
                 Console.WriteLine("Native PiP entry, topmost, bottom-left positioning and exit passed.");
-            }).GetAwaiter().GetResult();
+            }).Task.Unwrap();
+            var frame = new DispatcherFrame();
+            work.ContinueWith(_ => helper.Dispatcher.BeginInvoke(() => frame.Continue = false));
+            Dispatcher.PushFrame(frame);
+            work.GetAwaiter().GetResult();
         }
         finally { hotkeys.Dispose(); helper.Close(); app.Shutdown(); }
     }
@@ -123,10 +141,27 @@ internal static class PipTests
     public static bool HasTransparentAppearance(nint window) =>
         (GetWindowLong(window, -20) & 0x00000020) != 0 &&
         GetLayeredWindowAttributes(window, out _, out var alpha, out var flags) && alpha == 0 && (flags & 2) != 0;
-    public static async Task TestMouseVisibilityAsync(ChromeFixture session, int pid, nint helper, VideoController controller)
+    public static async Task TestMouseVisibilityAsync(ChromeFixture session, int pid, nint helper, VideoController controller, HotkeyService hotkeys, string root)
     {
         Check(GetCursorPos(out var originalCursor), "Read original cursor position");
         using var visibility = new PipMouseVisibilityService(pollAutomatically: false);
+        void OnHotkey(HotkeyAction action) { if (action == HotkeyAction.ReversePipVisibility) visibility.CycleMode(); }
+        hotkeys.Pressed += OnHotkey;
+        Check(hotkeys.IsRegistered(HotkeyAction.ReversePipVisibility), "Unmodified tilde is registered as a system hotkey");
+        bool FrameVisible() => visibility.FrameWindowHandle != 0 && IsWindowVisible(visibility.FrameWindowHandle);
+        void CheckFrame(string symbol)
+        {
+            Check(FrameVisible(), "Mode bar is visible");
+            Check(GetWindowRect(visibility.FrameWindowHandle, out var frameBounds) && GetWindowRect(visibility.WindowHandle, out var videoBounds) &&
+                Math.Abs(frameBounds.Left - videoBounds.Left) <= 1 && Math.Abs(frameBounds.Right - videoBounds.Right) <= 1 &&
+                Math.Abs(frameBounds.Bottom - videoBounds.Top) <= 1, "Bar follows the video's full width immediately above it");
+            Check(WindowFromPoint(new ScreenPoint { X = (frameBounds.Left + frameBounds.Right) / 2, Y = (frameBounds.Top + frameBounds.Bottom) / 2 }) != visibility.FrameWindowHandle, "Bar does not intercept mouse hit testing");
+            Check((GetWindowLong(visibility.FrameWindowHandle, -20) & 0x080000A0) == 0x080000A0,
+                "Bar is a non-activating, mouse-transparent tool window");
+            var bar = Application.Current.Windows.OfType<GenshinVideoHelper.App.PipFrameWindow>().Single(w => w.WindowHandle == visibility.FrameWindowHandle);
+            Check(((UIElement)bar.FindName(symbol)).Visibility == Visibility.Visible, "Correct mode icon: " + symbol);
+            Capture(bar, root, "pip-mode-" + visibility.Mode + ".png", (int)bar.ActualWidth, 24);
+        }
         try
         {
             var pip = PipWindowService.FindPip(pid);
@@ -158,37 +193,58 @@ internal static class PipTests
             await ExpectVisibility(false, "Paused PiP continues normal mouse avoidance");
             await controller.ExecuteAsync(session.Page, new("ensurePlay"));
 
+            Check(!FrameVisible(), "Automatic mode hides video and bar together");
             keybd_event(0xC0, 0, 0, 0);
-            await ExpectVisibility(true, "Tilde held inside forces show");
+            await ExpectVisibility(true, "Press tilde locks video visible inside the mouse region");
+            Check(visibility.Mode == PipVisibilityMode.AlwaysVisible, "Automatic -> locked");
+            CheckFrame("LockIcon");
+            for (var repeat = 0; repeat < 4; repeat++) keybd_event(0xC0, 0, 0, 0);
+            await Task.Delay(150);
+            Check(visibility.Mode == PipVisibilityMode.AlwaysVisible, "Holding/repeating the key cannot cycle again");
             keybd_event(0xC0, 0, 2, 0);
-            await ExpectVisibility(false, "Releasing tilde inside restores hide");
-            SetCursorPos(bounds.Right + (int)Math.Ceiling(width * 0.21), centerY);
-            await ExpectVisibility(true, "Just beyond 20-percent horizontal boundary shows");
+            await Task.Delay(80);
+            await ExpectVisibility(true, "Key release preserves locked mode");
+
             keybd_event(0xC0, 0, 0, 0);
-            await ExpectVisibility(false, "Tilde held outside forces hide");
             keybd_event(0xC0, 0, 2, 0);
-            await ExpectVisibility(true, "Releasing tilde outside restores show");
-            SetCursorPos((bounds.Left + bounds.Right) / 2, bounds.Top - (int)(height * 0.1));
-            await ExpectVisibility(false, "Vertical expanded margin also hides");
-            keybd_event(0x12, 0, 0, 0);
-            await ExpectVisibility(false, "Old Alt key no longer reverses default hiding");
-            keybd_event(0x12, 0, 2, 0);
-            visibility.SetReversalBinding(new HotkeyGesture(2, 0x77, "Ctrl+F8"));
+            await ExpectVisibility(false, "Second press forces hidden video");
+            Check(visibility.Mode == PipVisibilityMode.AlwaysHidden, "Locked -> hidden");
+            Check(!FrameVisible(), "Forced hide hides video and bar together");
+            SetCursorPos(bounds.Right + width, centerY);
+            await ExpectVisibility(false, "Forced hide ignores pointer leaving the region");
+            Check(!FrameVisible(), "Forced hide keeps the bar hidden after the pointer leaves");
+            keybd_event(0xC0, 0, 0, 0);
+            keybd_event(0xC0, 0, 2, 0);
+            await ExpectVisibility(true, "Third press returns to mouse avoidance");
+            Check(visibility.Mode == PipVisibilityMode.Automatic, "Hidden -> automatic");
+            CheckFrame("MouseIcon");
+            GetWindowRect(visibility.FrameWindowHandle, out var barBounds);
+            SetCursorPos((barBounds.Left + barBounds.Right) / 2, (barBounds.Top + barBounds.Bottom) / 2);
+            await ExpectVisibility(false, "Approaching the bar also hides both windows");
+            Check(!FrameVisible(), "Bar itself participates in automatic avoidance");
+
+            var bindings = HotkeyBindings.Defaults();
+            bindings[HotkeyAction.ReversePipVisibility] = "Ctrl+F8";
+            Check(hotkeys.Enable(bindings).Count == 0, "Register editable mode chord");
             keybd_event(0x77, 0, 0, 0);
-            await ExpectVisibility(false, "Custom chord needs its modifier");
-            keybd_event(0x11, 0, 0, 0);
-            await ExpectVisibility(true, "Custom Ctrl+F8 held reverses hiding");
-            keybd_event(0x11, 0, 2, 0);
-            await ExpectVisibility(false, "Releasing chord modifier restores hiding");
-            visibility.SetReversalBinding(new HotkeyGesture(0, 0x77, "F8"));
-            await ExpectVisibility(true, "New single-key binding takes effect immediately");
-            visibility.SetReversalBinding(null);
-            await ExpectVisibility(false, "Disabled hold binding cannot reverse hiding");
             keybd_event(0x77, 0, 2, 0);
-            visibility.SetReversalBinding(new HotkeyGesture(0, 0xC0, "~"));
+            await Task.Delay(80);
+            Check(visibility.Mode == PipVisibilityMode.Automatic, "Chord without its modifier does nothing");
+            keybd_event(0x11, 0, 0, 0);
+            keybd_event(0x77, 0, 0, 0);
+            keybd_event(0x77, 0, 2, 0);
+            keybd_event(0x11, 0, 2, 0);
+            await ExpectVisibility(true, "Custom chord cycles once and persists after release");
+            hotkeys.Disable();
+            keybd_event(0xC0, 0, 0, 0);
+            keybd_event(0xC0, 0, 2, 0);
+            await Task.Delay(80);
+            Check(visibility.Mode == PipVisibilityMode.AlwaysVisible, "Disabling hotkeys prevents mode changes");
+            Check(hotkeys.Enable().Count == 0, "Restore default bindings");
+            visibility.CycleMode();
+            visibility.CycleMode();
             SetCursorPos(bounds.Right + (int)Math.Ceiling(width * 0.25), centerY);
-            await ExpectVisibility(true, "Show after leaving area");
-            Check(GetForegroundWindow() == foreground, "Restoring native PiP does not steal focus");
+            await ExpectVisibility(true, "Show both windows after leaving the area");            Check(GetForegroundWindow() == foreground, "Restoring native PiP does not steal focus");
             Check((GetWindowLong(pip, -20) & 0x00080020) == (originalExtendedStyle & 0x00080020), "Restore original layering and hit-test styles");
 
             SetCursorPos((bounds.Left + bounds.Right) / 2, centerY);
@@ -198,6 +254,7 @@ internal static class PipTests
             GetMonitorInfo(monitor, ref monitorInfo);
             Check(SetWindowPos(pip, new nint(-1), monitorInfo.Work.Left + 100, monitorInfo.Work.Top + 70, width + 80, height + 45, 0x0010), "Move and resize hidden window without showing");
             await ExpectVisibility(true, "Uses moved bounds instead of former hiding region");
+            CheckFrame("MouseIcon");
             GetWindowRect(pip, out bounds);
             SetCursorPos((bounds.Left + bounds.Right) / 2, (bounds.Top + bounds.Bottom) / 2);
             await ExpectVisibility(false, "Resized current window region hides");
@@ -221,7 +278,7 @@ internal static class PipTests
                 visibility.Refresh();
                 await Task.Delay(40);
             }
-            Check(PipWindowService.FindPip(pid) == 0 && visibility.WindowHandle == 0, "Closed native PiP cannot be restored by pointer or Alt before browser poll");
+            Check(PipWindowService.FindPip(pid) == 0 && visibility.WindowHandle == 0 && !FrameVisible(), "Closing PiP removes the bar; cycling never reopens either window");
             visibility.Suspend();
             Check(!(await controller.ExecuteAsync(session.Page, new("status"))).PictureInPicture && visibility.BrowserProcessId == 0 && visibility.WindowHandle == 0, "Manual PiP close stops hiding; mouse/reversal key never reopen it");
             await controller.ExecuteAsync(session.Page, new("ensurePip"));
@@ -232,9 +289,10 @@ internal static class PipTests
             visibility.TrackBrowser(pid);
             await ExpectVisibility(false, "Reopened PiP resumes mouse avoidance");
             visibility.Dispose();
+            Check(visibility.FrameWindowHandle == 0, "Disposal destroys the bar");
             for (var i = 0; i < 60 && !IsWindowVisible(pip); i++) await Task.Delay(20);
             Check(IsWindowVisible(pip) && !HasTransparentAppearance(pip) && (await controller.ExecuteAsync(session.Page, new("status"))).PictureInPicture, "Stopping helper restores only its temporarily hidden window");
-            Console.WriteLine("Mouse avoidance: 20-percent margins, playback/hit testing, tilde press/release, editable single/chord bindings and disabled reversal, focus, moved/resized bounds, owner isolation, manual-close suppression and disposal restoration passed.");
+            Console.WriteLine("PiP modes: three-state cycling, no-repeat, editable chord, both-window mouse avoidance, bar icons/placement, playback, focus, move/resize, manual close and disposal passed.");
         }
         finally
         {
@@ -242,6 +300,7 @@ internal static class PipTests
             keybd_event(0x12, 0, 2, 0);
             keybd_event(0x11, 0, 2, 0);
             keybd_event(0x77, 0, 2, 0);
+            hotkeys.Pressed -= OnHotkey;
             visibility.Dispose();
             SetCursorPos(originalCursor.X, originalCursor.Y);
         }

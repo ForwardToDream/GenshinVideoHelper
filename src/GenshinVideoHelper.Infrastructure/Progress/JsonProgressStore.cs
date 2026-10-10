@@ -92,9 +92,11 @@ public sealed class JsonProgressStore(string path) : IProgressStore
         public override WatchSegment Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options)
         {
             if (reader.TokenType != JsonTokenType.StartArray) throw new JsonException("已看区间应为 [起, 止]。");
-            var values = new List<double>(2);
-            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray) values.Add(reader.GetDouble());
-            return values.Count == 2 ? new(values[0], values[1]) : throw new JsonException("已看区间应为 [起, 止]。");
+            if (!reader.Read() || reader.TokenType != JsonTokenType.Number || !reader.TryGetDouble(out var start) ||
+                !reader.Read() || reader.TokenType != JsonTokenType.Number || !reader.TryGetDouble(out var end) ||
+                !reader.Read() || reader.TokenType != JsonTokenType.EndArray)
+                throw new JsonException("已看区间应为两个数字 [起, 止]。");
+            return new(start, end);
         }
 
         public override void Write(Utf8JsonWriter writer, WatchSegment value, JsonSerializerOptions options) =>

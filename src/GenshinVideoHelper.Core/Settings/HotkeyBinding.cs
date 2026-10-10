@@ -1,5 +1,6 @@
 namespace GenshinVideoHelper.Core.Settings;
 
+// ReversePipVisibility retains its saved binding key; the action now cycles the three visibility modes.
 public enum HotkeyAction { TogglePlayback, SeekBackward, SeekForward, TogglePip, PlacePip, ToggleMute, PreviousEpisode, NextEpisode, ReversePipVisibility }
 
 public readonly record struct HotkeyGesture(uint Modifiers, uint Key, string Text)
@@ -56,7 +57,7 @@ public static class HotkeyBindings
     {
         HotkeyAction.SeekBackward => "后退", HotkeyAction.TogglePlayback => "暂停 / 继续", HotkeyAction.SeekForward => "前进",
         HotkeyAction.PreviousEpisode => "上一分集", HotkeyAction.NextEpisode => "下一分集",
-        HotkeyAction.TogglePip => "画中画开关", HotkeyAction.PlacePip => "放回左下角", HotkeyAction.ToggleMute => "静音 / 恢复声音", HotkeyAction.ReversePipVisibility => "反转浮窗隐藏（按住）", _ => action.ToString()
+        HotkeyAction.TogglePip => "画中画开关", HotkeyAction.PlacePip => "放回左下角", HotkeyAction.ToggleMute => "静音 / 恢复声音", HotkeyAction.ReversePipVisibility => "切换浮窗显隐模式", _ => action.ToString()
     };
 
     // Missing entries get new defaults; existing invalid or duplicate bindings are reported before registration.

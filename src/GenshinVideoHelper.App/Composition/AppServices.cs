@@ -42,7 +42,7 @@ public sealed class AppServices : IDisposable
         var loaded = store.Load();
         AppLog.MinLevel = loaded.Settings.LogLevel;
         AppLog.Info("App", $"配置已加载，日志级别 {loaded.Settings.LogLevel}{(loaded.Warning is null ? "" : "；" + loaded.Warning)}。");
-        return new(loaded.Settings, Path.Combine(ApplicationPaths.DataDirectory, "Chrome"), store, loadWarning: loaded.Warning, enableWarmup: true,
+        return new(loaded.Settings, ApplicationPaths.BrowserProfileDirectory, store, loadWarning: loaded.Warning, enableWarmup: true,
             progressStore: new JsonProgressStore(ApplicationPaths.ProgressPath));
     }
 

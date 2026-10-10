@@ -30,9 +30,7 @@ public sealed class HotkeyService : IDisposable
         var conflicts = new List<string>();
         foreach (var (action, text) in validated)
         {
-            // Hold/release is observed by the PiP service; WM_HOTKEY only reports presses.
-            if (action == HotkeyAction.ReversePipVisibility) continue;
-            HotkeyGesture.TryParse(text, out var gesture);
+            HotkeyGesture.TryParse(text, out var gesture, allowUnmodified: action == HotkeyAction.ReversePipVisibility);
             var id = 0x5600 + (int)action;
             if (!RegisterHotKey(_source.Handle, id, gesture.Modifiers | 0x4000, gesture.Key))
             {
@@ -77,4 +75,3 @@ public sealed class HotkeyService : IDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool UnregisterHotKey(nint hwnd, int id);
 }
-

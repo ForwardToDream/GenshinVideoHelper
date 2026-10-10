@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
-using GenshinVideoHelper.Core.Settings;
+using GenshinVideoHelper.Core.Models;
 using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.App.Native;
@@ -14,7 +14,7 @@ public sealed class PipMouseVisibilityService : IDisposable
     private const uint Alpha = 0x00000002;
     private readonly DispatcherTimer _timer = new(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(50) };
     private readonly bool _pollAutomatically;
-    private HotkeyGesture? _reversalGesture = new HotkeyGesture(0, 0xC0, "~");
+    private PipFrameWindow? _frame;
     private nint _window;
     private int _originalExtendedStyle;
     private uint _originalColorKey, _originalLayeredFlags;
@@ -24,6 +24,8 @@ public sealed class PipMouseVisibilityService : IDisposable
     public int BrowserProcessId { get; private set; }
     public bool IsTemporarilyHidden => _hiddenByUs;
     public nint WindowHandle => _window;
+    public PipVisibilityMode Mode { get; private set; } = PipVisibilityMode.Automatic;
+    public nint FrameWindowHandle => _frame?.WindowHandle ?? 0;
 
     public PipMouseVisibilityService(bool pollAutomatically = true)
     {
@@ -31,10 +33,19 @@ public sealed class PipMouseVisibilityService : IDisposable
         _timer.Tick += (_, _) => Refresh();
     }
 
-    public void SetReversalBinding(HotkeyGesture? gesture)
+    public bool CycleMode()
     {
-        _reversalGesture = gesture;
         Refresh();
+        if (_disposed || _window == 0) return false;
+        Mode = Mode switch
+        {
+            PipVisibilityMode.Automatic => PipVisibilityMode.AlwaysVisible,
+            PipVisibilityMode.AlwaysVisible => PipVisibilityMode.AlwaysHidden,
+            _ => PipVisibilityMode.Automatic
+        };
+        AppLog.Info("Pip", $"浮窗显隐模式：{Mode}。");
+        Refresh();
+        return true;
     }
 
     public void TrackBrowser(int processId)
@@ -60,29 +71,31 @@ public sealed class PipMouseVisibilityService : IDisposable
             Restore();
             _window = PipWindowService.FindPip(BrowserProcessId);
         }
-        if (_window == 0 || !GetWindowRect(_window, out var bounds) || !GetCursorPos(out var cursor)) return;
+        if (_window == 0 || !GetWindowRect(_window, out var bounds))
+        {
+            _frame?.Hide();
+            return;
+        }
         var width = bounds.Right - bounds.Left;
         var height = bounds.Bottom - bounds.Top;
-        if (width <= 0 || height <= 0) return;
-        // Cursor and window bounds use the same screen-coordinate API and current DPI context.
-        var inside = cursor.X >= bounds.Left - width * 0.2 && cursor.X < bounds.Right + width * 0.2 &&
-                     cursor.Y >= bounds.Top - height * 0.2 && cursor.Y < bounds.Bottom + height * 0.2;
-        var reversalHeld = _reversalGesture is { } gesture && IsHeld(gesture);
-        if (inside != reversalHeld)
-        {
-            if (!_hiddenByUs) Hide();
-        }
+        if (width <= 0 || height <= 0) { _frame?.Hide(); return; }
+        // Include the new top bar in the pointer-avoidance area; use the native window's DPI.
+        var frameHeight = (int)Math.Round(PipFrameWindow.HeightDip * GetDpiForWindow(_window) / 96d);
+        var inside = GetCursorPos(out var cursor) &&
+                     cursor.X >= bounds.Left - width * 0.2 && cursor.X < bounds.Right + width * 0.2 &&
+                     cursor.Y >= bounds.Top - frameHeight - height * 0.2 && cursor.Y < bounds.Bottom + height * 0.2;
+        var hide = Mode == PipVisibilityMode.AlwaysHidden || Mode == PipVisibilityMode.Automatic && inside;
+        if (hide) { if (!_hiddenByUs) Hide(); }
         else if (_hiddenByUs) Restore();
+
+        if (hide) _frame?.Hide();
+        else
+        {
+            _frame ??= new PipFrameWindow();
+            _frame.Follow(_window, bounds.Left, bounds.Top, width, Mode);
+        }
     }
 
-    private static bool IsHeld(HotkeyGesture gesture) =>
-        IsDown((int)gesture.Key) &&
-        ((gesture.Modifiers & 1) == 0 || IsDown(0x12)) &&
-        ((gesture.Modifiers & 2) == 0 || IsDown(0x11)) &&
-        ((gesture.Modifiers & 4) == 0 || IsDown(0x10)) &&
-        ((gesture.Modifiers & 8) == 0 || IsDown(0x5B) || IsDown(0x5C));
-
-    private static bool IsDown(int key) => (GetAsyncKeyState(key) & 0x8000) != 0;
     private void Hide()
     {
         _originalExtendedStyle = GetWindowLong(_window, ExtendedStyle);
@@ -101,6 +114,7 @@ public sealed class PipMouseVisibilityService : IDisposable
     public void Suspend()
     {
         _timer.Stop();
+        _frame?.Hide();
         Restore();
         if (BrowserProcessId != 0) AppLog.Info("Pip", "停止跟踪浮窗显隐。");
         _window = 0;
@@ -129,13 +143,15 @@ public sealed class PipMouseVisibilityService : IDisposable
         if (_disposed) return;
         Suspend();
         _disposed = true;
+        _frame?.Close();
+        _frame = null;
     }
 
     [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
     [DllImport("user32.dll")] private static extern bool GetWindowRect(nint window, out Rect bounds);
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point cursor);
-    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint window);
     [DllImport("user32.dll")] private static extern int GetWindowLong(nint window, int index);
     [DllImport("user32.dll", SetLastError = true)] private static extern int SetWindowLong(nint window, int index, int value);
     [DllImport("user32.dll")] private static extern bool GetLayeredWindowAttributes(nint window, out uint colorKey, out byte alpha, out uint flags);

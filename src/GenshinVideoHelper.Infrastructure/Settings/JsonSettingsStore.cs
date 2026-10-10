@@ -41,7 +41,7 @@ public sealed class JsonSettingsStore(string path) : ISettingsStore
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 AppLog.Warn("Settings", $"无法创建配置：{_path}", ex);
-                warning = $"无法创建根目录配置：{ex.Message}";
+                warning = $"无法创建配置文件：{ex.Message}";
             }
         }
         return new(settings, warning);
