@@ -126,7 +126,7 @@ internal static class PipTests
                 Check(Math.Abs(bounds.Left - info.Work.Left - margin) <= 3, "PiP left margin");
                 Check(Math.Abs(bounds.Bottom - info.Work.Bottom + margin) <= 3, "PiP bottom margin");
                 await TestMouseVisibilityAsync(session, pid, handle, controller, hotkeys, root);
-                state = await controller.ExecuteAsync(session.Page, new("pip"));
+                state = await controller.ExecuteAsync(session.Page, new("ensurePipClosed"));
                 Check(!state.PictureInPicture, "Exit PiP");
                 Console.WriteLine("Native PiP entry, topmost, bottom-left positioning and exit passed.");
             }).Task.Unwrap();
@@ -151,16 +151,17 @@ internal static class PipTests
         bool FrameVisible() => visibility.FrameWindowHandle != 0 && IsWindowVisible(visibility.FrameWindowHandle);
         void CheckFrame(string symbol)
         {
-            Check(FrameVisible(), "Mode bar is visible");
-            Check(GetWindowRect(visibility.FrameWindowHandle, out var frameBounds) && GetWindowRect(visibility.WindowHandle, out var videoBounds) &&
-                Math.Abs(frameBounds.Left - videoBounds.Left) <= 1 && Math.Abs(frameBounds.Right - videoBounds.Right) <= 1 &&
-                Math.Abs(frameBounds.Bottom - videoBounds.Top) <= 1, "Bar follows the video's full width immediately above it");
-            Check(WindowFromPoint(new ScreenPoint { X = (frameBounds.Left + frameBounds.Right) / 2, Y = (frameBounds.Top + frameBounds.Bottom) / 2 }) != visibility.FrameWindowHandle, "Bar does not intercept mouse hit testing");
-            Check((GetWindowLong(visibility.FrameWindowHandle, -20) & 0x080000A0) == 0x080000A0,
-                "Bar is a non-activating, mouse-transparent tool window");
+            Check(FrameVisible(), "Unified frame is visible");
+            Check(GetWindowRect(visibility.FrameWindowHandle, out var frameBounds), "Frame bounds available");
+            Check(GetWindowRect(visibility.WindowHandle, out var videoBounds), "Native video bounds available");
+            Check(videoBounds.Right < 0 && videoBounds.Bottom < 0 && IsWindowVisible(visibility.WindowHandle),
+                "Chrome's live source stays open off-screen");
+            Check((GetWindowLong(visibility.FrameWindowHandle, -20) & 0x08000080) == 0x08000080,
+                "Frame is a non-activating tool window");
             var bar = Application.Current.Windows.OfType<GenshinVideoHelper.App.PipFrameWindow>().Single(w => w.WindowHandle == visibility.FrameWindowHandle);
+            Check(bar.IsVideoEmbedded, "Chrome's GPU surface is embedded in the frame");
             Check(((UIElement)bar.FindName(symbol)).Visibility == Visibility.Visible, "Correct mode icon: " + symbol);
-            Capture(bar, root, "pip-mode-" + visibility.Mode + ".png", (int)bar.ActualWidth, 24);
+            CaptureEmbeddedFrame(visibility.FrameWindowHandle, root, "pip-frame-" + visibility.Mode + ".png");
         }
         try
         {
@@ -172,15 +173,33 @@ internal static class PipTests
             var height = bounds.Bottom - bounds.Top;
             var centerY = (bounds.Top + bounds.Bottom) / 2;
             Check(SetCursorPos(bounds.Right + (int)Math.Ceiling(width * 0.25), centerY), "Move pointer outside expanded area");
+            await controller.ExecuteAsync(session.Page, new("ensurePlay"));
             visibility.TrackBrowser(pid);
             await ExpectVisibility(true, "Outside shows PiP");
+            await PipWindowService.PlaceAsync(pid, helper, 420, 20, 16d / 9);
+            GetWindowRect(visibility.FrameWindowHandle, out var placedFrame);
+            var placementMonitor = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+            GetMonitorInfo(MonitorFromWindow(helper, 2), ref placementMonitor);
+            var placementMargin = (int)Math.Round(20 * GetDpiForWindow(helper) / 96d);
+            Check(Math.Abs(placedFrame.Left - placementMonitor.Work.Left - placementMargin) <= 1 &&
+                Math.Abs(placedFrame.Bottom - placementMonitor.Work.Bottom + placementMargin) <= 1,
+                "Bottom-left placement moves the whole embedded frame");
+            await Task.Delay(300);
+            GetWindowRect(visibility.FrameWindowHandle, out bounds);
+            width = bounds.Right - bounds.Left;
+            height = bounds.Bottom - bounds.Top;
+            centerY = (bounds.Top + bounds.Bottom) / 2;
+            var firstPixels = CaptureEmbeddedFrame(visibility.FrameWindowHandle, root, "pip-frame-attached.png");
+            await Task.Delay(400);
+            var nextPixels = CaptureEmbeddedFrame(visibility.FrameWindowHandle, root, "pip-frame-playing.png");
+            Check(firstPixels != nextPixels, "Off-screen Chrome supplies changing video frames, not a frozen thumbnail");
             var foreground = GetForegroundWindow();
             await controller.ExecuteAsync(session.Page, new("ensurePlay"));
             await Task.Delay(700);
             var startTime = (await controller.ExecuteAsync(session.Page, new("status"))).CurrentTime;
             SetCursorPos(bounds.Right + (int)(width * 0.1), centerY);
             await ExpectVisibility(false, "20-percent margin hides before entering actual window");
-            Check(WindowFromPoint(new ScreenPoint { X = (bounds.Left + bounds.Right) / 2, Y = centerY }) != pip, "Hidden window no longer captures mouse hit testing");
+            Check(WindowFromPoint(new ScreenPoint { X = (bounds.Left + bounds.Right) / 2, Y = centerY }) != pip && WindowFromPoint(new ScreenPoint { X = (bounds.Left + bounds.Right) / 2, Y = centerY }) != visibility.FrameWindowHandle, "Hidden frame no longer captures mouse hit testing");
             await Task.Delay(700);
             var hiddenState = await controller.ExecuteAsync(session.Page, new("status"));
             Check(hiddenState.PictureInPicture && !hiddenState.Paused && hiddenState.CurrentTime > startTime + 0.2, "Hidden Chrome PiP session stays open and continues playback");
@@ -188,7 +207,7 @@ internal static class PipTests
             Check(pausedHidden.PictureInPicture && pausedHidden.Paused, "User can pause while PiP is temporarily hidden");
             SetCursorPos(bounds.Right + width, centerY);
             await ExpectVisibility(true, "Leaving hiding region restores paused PiP");
-            Check((await controller.ExecuteAsync(session.Page, new("status"))).Paused, "Restoring opacity never resumes a user-paused video");
+            Check((await controller.ExecuteAsync(session.Page, new("status"))).Paused, "Showing the frame never resumes a user-paused video");
             SetCursorPos(bounds.Right + (int)(width * 0.1), centerY);
             await ExpectVisibility(false, "Paused PiP continues normal mouse avoidance");
             await controller.ExecuteAsync(session.Page, new("ensurePlay"));
@@ -199,16 +218,36 @@ internal static class PipTests
             await ExpectVisibility(true, "Press Alt+4 locks video visible inside the mouse region");
             Check(visibility.Mode == PipVisibilityMode.AlwaysVisible, "Automatic -> locked");
             CheckFrame("LockIcon");
+            keybd_event(0x34, 0, 2, 0);
+            keybd_event(0x12, 0, 2, 0);
+            GetWindowRect(visibility.FrameWindowHandle, out var defaultBounds);
+            var frameWindow = Application.Current.Windows.OfType<GenshinVideoHelper.App.PipFrameWindow>()
+                .Single(w => w.WindowHandle == visibility.FrameWindowHandle);
+            var frameScale = GetDpiForWindow(visibility.FrameWindowHandle) / 96d;
+            SetWindowPos(visibility.FrameWindowHandle, new nint(-1), defaultBounds.Left, defaultBounds.Top,
+                (int)Math.Round(frameWindow.MinWidth * frameScale), (int)Math.Round(frameWindow.MinHeight * frameScale), 0x0010);
+            await Task.Delay(200);
+            CaptureEmbeddedFrame(visibility.FrameWindowHandle, root, "pip-frame-minimum.png");
+            SetWindowPos(visibility.FrameWindowHandle, new nint(-1), defaultBounds.Left, defaultBounds.Top,
+                defaultBounds.Right - defaultBounds.Left, defaultBounds.Bottom - defaultBounds.Top, 0x0010);
+            await Task.Delay(200);
+            await TestEmbeddedDragAsync(visibility, foreground, false);
+            await TestEmbeddedDragAsync(visibility, foreground, true);
+            GetWindowRect(visibility.FrameWindowHandle, out bounds);
+            width = bounds.Right - bounds.Left;
+            height = bounds.Bottom - bounds.Top;
+            centerY = (bounds.Top + bounds.Bottom) / 2;
+            CaptureEmbeddedFrame(visibility.FrameWindowHandle, root, "pip-frame-dragged.png");
+            keybd_event(0x12, 0, 0, 0);
+            keybd_event(0x34, 0, 0, 0);
+            await ExpectVisibility(false, "A fresh key press enters forced hiding");
             for (var repeat = 0; repeat < 4; repeat++) keybd_event(0x34, 0, 0, 0);
             await Task.Delay(150);
-            Check(visibility.Mode == PipVisibilityMode.AlwaysVisible, "Holding/repeating the key cannot cycle again");
+            Check(visibility.Mode == PipVisibilityMode.AlwaysHidden, "Holding/repeating the key cannot cycle again");
             keybd_event(0x34, 0, 2, 0);
             keybd_event(0x12, 0, 2, 0);
             await Task.Delay(80);
-            await ExpectVisibility(true, "Key release preserves locked mode");
-
-            SendAltNumber(0x34);
-            await ExpectVisibility(false, "Second press forces hidden video");
+            await ExpectVisibility(false, "Key release preserves forced hiding");
             Check(visibility.Mode == PipVisibilityMode.AlwaysHidden, "Locked -> hidden");
             Check(!FrameVisible(), "Forced hide hides video and bar together");
             SetCursorPos(bounds.Right + width, centerY);
@@ -243,27 +282,32 @@ internal static class PipTests
             visibility.CycleMode();
             visibility.CycleMode();
             SetCursorPos(bounds.Right + (int)Math.Ceiling(width * 0.25), centerY);
-            await ExpectVisibility(true, "Show both windows after leaving the area");            Check(GetForegroundWindow() == foreground, "Restoring native PiP does not steal focus");
-            Check((GetWindowLong(pip, -20) & 0x00080020) == (originalExtendedStyle & 0x00080020), "Restore original layering and hit-test styles");
+            await ExpectVisibility(true, "Show the whole frame after leaving the area");
+            Check(GetForegroundWindow() == foreground, "Showing the frame does not steal focus");
+            Check((GetWindowLong(pip, -20) & 0x00080020) == (originalExtendedStyle & 0x00080020), "Hiding never changes Chrome's rendering styles");
 
             SetCursorPos((bounds.Left + bounds.Right) / 2, centerY);
             await ExpectVisibility(false, "Hide actual window interior");
             var monitor = MonitorFromWindow(helper, 2);
             var monitorInfo = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
             GetMonitorInfo(monitor, ref monitorInfo);
-            Check(SetWindowPos(pip, new nint(-1), monitorInfo.Work.Left + 100, monitorInfo.Work.Top + 70, width + 80, height + 45, 0x0010), "Move and resize hidden window without showing");
+            Check(SetWindowPos(visibility.FrameWindowHandle, new nint(-1), monitorInfo.Work.Left + 100, monitorInfo.Work.Top + 70, width + 80, height + 80, 0x0010), "Move and resize the whole hidden frame");
             await ExpectVisibility(true, "Uses moved bounds instead of former hiding region");
+            await Task.Delay(250);
             CheckFrame("MouseIcon");
-            GetWindowRect(pip, out bounds);
+            GetWindowRect(visibility.FrameWindowHandle, out bounds);
             SetCursorPos((bounds.Left + bounds.Right) / 2, (bounds.Top + bounds.Bottom) / 2);
             await ExpectVisibility(false, "Resized current window region hides");
             visibility.TrackBrowser(pid + 100000);
             await Task.Delay(80);
-            Check(IsWindowVisible(pip) && !HasTransparentAppearance(pip) && visibility.WindowHandle == 0, "Changing tracked browser restores prior window and ignores other process IDs");
+            Check(IsWindowVisible(pip) && !HasTransparentAppearance(pip) && (GetWindowLong(pip, -16) & 0x40000000) == 0 && IsWindowEnabled(pip) && visibility.WindowHandle == 0, "Changing tracked browser detaches and restores the owned video, ignoring other process IDs");
             visibility.TrackBrowser(pid);
             await ExpectVisibility(false, "Track owned window again");
 
-            Check(PostMessage(pip, 0x0010, 0, 0), "Close owned native PiP using its actual close message");
+            var embeddedFrame = Application.Current.Windows.OfType<GenshinVideoHelper.App.PipFrameWindow>()
+                .Single(w => w.WindowHandle == visibility.FrameWindowHandle);
+            ((Button)embeddedFrame.FindName("CloseVideoButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Console.WriteLine("Unified frame close button invoked.");
             for (var i = 0; i < 40; i++)
             {
                 if (!(await controller.ExecuteAsync(session.Page, new("status"))).PictureInPicture) break;
@@ -289,9 +333,11 @@ internal static class PipTests
             await ExpectVisibility(false, "Reopened PiP resumes mouse avoidance");
             visibility.Dispose();
             Check(visibility.FrameWindowHandle == 0, "Disposal destroys the bar");
-            for (var i = 0; i < 60 && !IsWindowVisible(pip); i++) await Task.Delay(20);
-            Check(IsWindowVisible(pip) && !HasTransparentAppearance(pip) && (await controller.ExecuteAsync(session.Page, new("status"))).PictureInPicture, "Stopping helper restores only its temporarily hidden window");
-            Console.WriteLine("PiP modes: three-state cycling, no-repeat, editable chord, both-window mouse avoidance, bar icons/placement, playback, focus, move/resize, manual close and disposal passed.");
+            for (var i = 0; i < 60 && (await controller.ExecuteAsync(session.Page, new("status"))).PictureInPicture; i++)
+                await Task.Delay(20);
+            Check(!(await controller.ExecuteAsync(session.Page, new("status"))).PictureInPicture && !IsWindowVisible(pip),
+                "Disposal closes the owned Chrome PiP without restoring an independent visible window");
+            Console.WriteLine("Embedded PiP: live GPU surface, thin border, header/video drag, resize, three modes, hotkeys, playback, focus, close and detach passed.");
         }
         finally
         {
@@ -309,11 +355,59 @@ internal static class PipTests
             for (var i = 0; i < 100; i++)
             {
                 visibility.Refresh();
-                if (visibility.WindowHandle != 0 && IsWindowVisible(visibility.WindowHandle) && HasTransparentAppearance(visibility.WindowHandle) == !shown && visibility.IsTemporarilyHidden == !shown) return;
+                if (visibility.WindowHandle != 0 && IsWindowVisible(visibility.WindowHandle) && FrameVisible() == shown && visibility.IsTemporarilyHidden == !shown) return;
                 await Task.Delay(20);
             }
-            throw new InvalidOperationException("ASSERT: " + label);
+            GetWindowRect(visibility.FrameWindowHandle, out var debugBounds);
+            GetCursorPos(out var debugCursor);
+            throw new InvalidOperationException($"ASSERT: {label}; source={visibility.WindowHandle:X}, frame={visibility.FrameWindowHandle:X}, sourceVisible={IsWindowVisible(visibility.WindowHandle)}, frameVisible={FrameVisible()}, hidden={visibility.IsTemporarilyHidden}, frameBounds={debugBounds.Left},{debugBounds.Top}-{debugBounds.Right},{debugBounds.Bottom}, cursor={debugCursor.X},{debugCursor.Y}");
         }
     }
 
+    private static async Task TestEmbeddedDragAsync(PipMouseVisibilityService visibility, nint foreground, bool videoArea)
+    {
+        GetWindowRect(visibility.FrameWindowHandle, out var before);
+        int x = before.Left + (before.Right - before.Left) / 2;
+        int y = videoArea ? (before.Top + before.Bottom) / 2 : before.Top + (int)(12 * GetDpiForWindow(visibility.FrameWindowHandle) / 96d);
+        await Task.Run(() =>
+        {
+            SetCursorPos(x, y);
+            try
+            {
+                mouse_event(2, 0, 0, 0, 0);
+                Thread.Sleep(100);
+                SetCursorPos(x + 65, y - 35);
+                Thread.Sleep(100);
+            }
+            finally { mouse_event(4, 0, 0, 0, 0); }
+        });
+        await Task.Delay(80);
+        GetWindowRect(visibility.FrameWindowHandle, out var after);
+        Check(Math.Abs(after.Left - before.Left - 65) <= 2 && Math.Abs(after.Top - before.Top + 35) <= 2,
+            "Dragging " + (videoArea ? "video" : "header") + " moves the whole frame");
+        Check(GetWindowRect(visibility.WindowHandle, out var source) && source.Right < 0 && source.Bottom < 0,
+            "Dragging moves one window while Chrome's source remains off-screen");
+        Check(GetForegroundWindow() == foreground, "Dragging the frame keeps foreground game/app focus");
+    }
+
+    private static ulong CaptureEmbeddedFrame(nint window, string root, string name)
+    {
+        GetWindowRect(window, out var bounds);
+        int width = bounds.Right - bounds.Left, height = bounds.Bottom - bounds.Top;
+        using var bitmap = new System.Drawing.Bitmap(width, height);
+        using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+            graphics.CopyFromScreen(bounds.Left, bounds.Top, 0, 0, bitmap.Size);
+        bitmap.Save(Path.Combine(root, "artifacts", name), System.Drawing.Imaging.ImageFormat.Png);
+        var colors = new HashSet<int>();
+        ulong signature = 14695981039346656037;
+        for (int y = height / 3; y < height * 3 / 4; y += 8)
+            for (int x = width / 5; x < width * 4 / 5; x += 8)
+            {
+                var color = bitmap.GetPixel(x, y).ToArgb();
+                colors.Add(color);
+                signature = unchecked((signature ^ (uint)color) * 1099511628211);
+            }
+        Check(colors.Count > 8, "Embedded native video actually renders; it is not a blank/black surface");
+        return signature;
+    }
 }

@@ -64,6 +64,9 @@ internal static class LifecycleTests
         try
         {
             window.Show();
+            window.Services.Pip.MouseVisibility.TrackBrowser(ownedPid);
+            Check(window.Services.Pip.MouseVisibility.FrameWindowHandle != 0 && GetWindowRect(pip, out var sourceBounds) && sourceBounds.Right < 0,
+                "Lifecycle owns an embedded GPU PiP surface");
             var tray = GetField<TrayIconService>(window, "_tray")!;
             Check(window.Icon is not null && tray.IsVisible, "Window/taskbar icon and tray share original icon asset");
             var notify = GetField<System.Windows.Forms.NotifyIcon>(tray, "_notify")!;

@@ -231,13 +231,13 @@ internal static class FollowTests
         var visibility = window.Services.Pip.MouseVisibility;
         await WaitForAsync(() => visibility.WindowHandle != 0, "Open PiP automatically starts mouse service", window);
         var pip = visibility.WindowHandle;
-        Check(GetCursorPos(out var originalCursor) && GetWindowRect(pip, out _), "Automatic test obtains real cursor and PiP bounds");
-        GetWindowRect(pip, out var bounds);
+        Check(GetCursorPos(out var originalCursor) && GetWindowRect(visibility.FrameWindowHandle, out _), "Automatic test obtains real cursor and frame bounds");
+        GetWindowRect(visibility.FrameWindowHandle, out var bounds);
         var originalWindowState = window.WindowState;
         try
         {
             SetCursorPos((bounds.Left + bounds.Right) / 2, (bounds.Top + bounds.Bottom) / 2);
-            await WaitForAsync(() => visibility.IsTemporarilyHidden && HasTransparentAppearance(pip), "Automatic timer hides on entering real PiP", window);
+            await WaitForAsync(() => visibility.IsTemporarilyHidden && !IsWindowVisible(visibility.FrameWindowHandle), "Automatic timer hides the whole PiP frame", window);
             Check(window.Services.Follow.Current.Video is { PictureInPicture: true, Paused: false }, "Temporary hiding retains active playing PiP session");
             SendAltNumber(0x34);
             await WaitForAsync(() => visibility.Mode == PipVisibilityMode.AlwaysVisible && !visibility.IsTemporarilyHidden &&
@@ -247,10 +247,11 @@ internal static class FollowTests
                 !IsWindowVisible(visibility.FrameWindowHandle), "Second click hides video and bar together", window);
             SendAltNumber(0x34);
             await WaitForAsync(() => visibility.Mode == PipVisibilityMode.Automatic && visibility.IsTemporarilyHidden &&
-                !IsWindowVisible(visibility.FrameWindowHandle), "Third click returns to automatic avoidance", window);            window.WindowState = WindowState.Minimized;
+                !IsWindowVisible(visibility.FrameWindowHandle), "Third click returns to automatic avoidance", window);
+            window.WindowState = WindowState.Minimized;
             SetCursorPos(bounds.Right + (bounds.Right - bounds.Left), bounds.Top);
-            await WaitForAsync(() => !visibility.IsTemporarilyHidden && IsWindowVisible(pip) && !HasTransparentAppearance(pip), "Mouse avoidance remains active while helper is minimized", window);
-            Console.WriteLine("Actual Bilibili PiP: three-state Alt+4 cycling, companion bar and minimized-helper operation passed.");
+            await WaitForAsync(() => !visibility.IsTemporarilyHidden && IsWindowVisible(visibility.FrameWindowHandle) && IsWindowVisible(pip), "Mouse avoidance remains active while helper is minimized", window);
+            Console.WriteLine("Actual Bilibili PiP: three-state Alt+4 cycling, unified frame and minimized-helper operation passed.");
         }
         finally
         {

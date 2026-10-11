@@ -33,6 +33,7 @@ internal static class NativeInput
         keybd_event(key, 0, 2, 0);
         keybd_event(0x12, 0, 2, 0);
     }
+    [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, nuint extra);
     [DllImport("user32.dll")] public static extern void keybd_event(byte key, byte scan, uint flags, nuint extra);
     [DllImport("user32.dll")] public static extern bool PostMessage(nint window, uint message, nuint wParam, nint lParam);
     [DllImport("user32.dll")] public static extern bool GetLayeredWindowAttributes(nint window, out uint colorKey, out byte alpha, out uint flags);
@@ -41,6 +42,7 @@ internal static class NativeInput
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] public static extern nint WindowFromPoint(ScreenPoint point);
     [DllImport("user32.dll")] public static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern bool IsWindowEnabled(nint window);
     [DllImport("user32.dll", SetLastError = true)] public static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
     [StructLayout(LayoutKind.Sequential)] public struct Bounds { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] public struct MonitorInfo { public int Size; public Bounds Monitor, Work; public uint Flags; }

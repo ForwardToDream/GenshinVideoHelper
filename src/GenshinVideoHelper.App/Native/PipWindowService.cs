@@ -7,6 +7,11 @@ namespace GenshinVideoHelper.App.Native;
 
 public static class PipWindowService
 {
+    private static readonly Dictionary<nint, PipFrameWindow> Frames = [];
+    internal static void RegisterFrame(nint pip, PipFrameWindow frame) { lock (Frames) Frames[pip] = frame; }
+    internal static void UnregisterFrame(nint pip) { lock (Frames) Frames.Remove(pip); }
+    private static PipFrameWindow? FrameFor(nint pip) { lock (Frames) return Frames.GetValueOrDefault(pip); }
+
     public static async Task PlaceAsync(int browserProcessId, nint helperWindow, int widthDip,
         int marginDip, double aspectRatio, CancellationToken token = default)
     {
@@ -30,6 +35,11 @@ public static class PipWindowService
         var width = Math.Clamp((int)Math.Round(widthDip * scale), 200, Math.Max(200, (work.Right - work.Left) / 2));
         var ratio = double.IsFinite(aspectRatio) && aspectRatio is > 0.2 and < 5 ? aspectRatio : 16d / 9;
         var height = Math.Min((int)Math.Round(width / ratio), (work.Bottom - work.Top) / 2);
+        if (FrameFor(pip) is { } frame)
+        {
+            frame.Place(work.Left + margin, work.Bottom - margin, width, height);
+            return;
+        }
         if (!SetWindowPos(pip, new nint(-1), work.Left + margin, work.Bottom - margin - height,
                 width, height, 0x0010)) // topmost, no activation; never reopen a closed native window
         {
@@ -42,6 +52,10 @@ public static class PipWindowService
 
     public static nint FindPip(int browserProcessId, bool includeHidden = false)
     {
+        nint[] embedded;
+        lock (Frames) embedded = Frames.Keys.ToArray();
+        foreach (var window in embedded)
+            if (IsPipWindow(window, browserProcessId, includeHidden)) return window;
         nint found = 0;
         EnumWindows((window, _) =>
         {
@@ -59,7 +73,8 @@ public static class PipWindowService
         if (process != browserProcessId) return false;
         var className = new StringBuilder(256);
         GetClassName(window, className, className.Capacity);
-        if (className.ToString() != "Chrome_WidgetWin_1" || (GetWindowLong(window, -20) & 0x00000008) == 0) return false;
+        if (className.ToString() != "Chrome_WidgetWin_1" ||
+            ((GetWindowLong(window, -20) & 0x00000008) == 0 && FrameFor(window) is null)) return false;
         var title = new StringBuilder(512);
         GetWindowText(window, title, title.Capacity);
         var caption = title.ToString();

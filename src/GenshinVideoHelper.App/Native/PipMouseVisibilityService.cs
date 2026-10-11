@@ -5,22 +5,14 @@ using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.App.Native;
 
-// Transparency only: never opens/shows PiP, changes playback, moves the window or takes focus.
+// Keep Chrome playing while the single visible frame is shown or hidden.
 public sealed class PipMouseVisibilityService : IDisposable
 {
-    private const int ExtendedStyle = -20;
-    private const int Layered = 0x00080000;
-    private const int Transparent = 0x00000020;
-    private const uint Alpha = 0x00000002;
     private readonly DispatcherTimer _timer = new(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(50) };
     private readonly bool _pollAutomatically;
     private PipFrameWindow? _frame;
     private nint _window;
-    private int _originalExtendedStyle;
-    private uint _originalColorKey, _originalLayeredFlags;
-    private byte _originalAlpha;
-    private bool _hiddenByUs;
-    private bool _disposed;
+    private bool _hiddenByUs, _disposed;
     public int BrowserProcessId { get; private set; }
     public bool IsTemporarilyHidden => _hiddenByUs;
     public nint WindowHandle => _window;
@@ -30,7 +22,11 @@ public sealed class PipMouseVisibilityService : IDisposable
     public PipMouseVisibilityService(bool pollAutomatically = true)
     {
         _pollAutomatically = pollAutomatically;
-        _timer.Tick += (_, _) => Refresh();
+        _timer.Tick += (_, _) =>
+        {
+            try { Refresh(); }
+            catch (Exception ex) { _timer.Stop(); AppLog.Warn("Pip", "浮窗嵌入失败，停止自动尝试。可点击放回左下角重试。", ex); }
+        };
     }
 
     public bool CycleMode()
@@ -66,94 +62,65 @@ public sealed class PipMouseVisibilityService : IDisposable
         if (_disposed || BrowserProcessId <= 0) return;
         if (!PipWindowService.IsPipWindow(_window, BrowserProcessId))
         {
-            // Chrome may keep its native window after PiP closes. Restore opacity only,
-            // then discard it; showing that retained window would undo the user's close.
-            Restore();
+            ReleaseFrame();
             _window = PipWindowService.FindPip(BrowserProcessId);
         }
-        if (_window == 0 || !GetWindowRect(_window, out var bounds))
+        if (_window == 0) return;
+        _frame ??= new PipFrameWindow();
+        if (_frame.VideoWindowHandle != _window)
         {
-            _frame?.Hide();
-            return;
+            try { _frame.Attach(_window); }
+            catch { _timer.Stop(); ReleaseFrame(); _window = 0; throw; }
+            AppLog.Info("Pip", $"浮窗 0x{_window:X} 已嵌入统一外框。");
         }
+        if (!GetWindowRect(_frame.WindowHandle, out var bounds)) return;
         var width = bounds.Right - bounds.Left;
         var height = bounds.Bottom - bounds.Top;
-        if (width <= 0 || height <= 0) { _frame?.Hide(); return; }
-        // Include the new top bar in the pointer-avoidance area; use the native window's DPI.
-        var frameHeight = (int)Math.Round(PipFrameWindow.HeightDip * GetDpiForWindow(_window) / 96d);
+        if (width <= 0 || height <= 0) return;
         var inside = GetCursorPos(out var cursor) &&
                      cursor.X >= bounds.Left - width * 0.2 && cursor.X < bounds.Right + width * 0.2 &&
-                     cursor.Y >= bounds.Top - frameHeight - height * 0.2 && cursor.Y < bounds.Bottom + height * 0.2;
+                     cursor.Y >= bounds.Top - height * 0.2 && cursor.Y < bounds.Bottom + height * 0.2;
         var hide = Mode == PipVisibilityMode.AlwaysHidden || Mode == PipVisibilityMode.Automatic && inside;
-        if (hide) { if (!_hiddenByUs) Hide(); }
-        else if (_hiddenByUs) Restore();
-
-        if (hide) _frame?.Hide();
-        else
+        _frame.SetMode(Mode);
+        if (hide == _hiddenByUs) return;
+        if (_frame.SetTemporarilyHidden(hide))
         {
-            _frame ??= new PipFrameWindow();
-            _frame.Follow(_window, bounds.Left, bounds.Top, width, Mode);
+            _hiddenByUs = hide;
+            AppLog.Debug("Pip", hide ? "统一浮窗临时隐藏。" : "统一浮窗恢复显示。");
         }
     }
 
-    private void Hide()
+    private void ReleaseFrame(bool closeVideo = false)
     {
-        _originalExtendedStyle = GetWindowLong(_window, ExtendedStyle);
-        if ((_originalExtendedStyle & Layered) != 0 && !GetLayeredWindowAttributes(_window,
-                out _originalColorKey, out _originalAlpha, out _originalLayeredFlags)) return;
-        if (SetWindowLong(_window, ExtendedStyle, _originalExtendedStyle | Layered | Transparent) == 0) return;
-        if (!SetLayeredWindowAttributes(_window, 0, 0, Alpha))
-        {
-            SetWindowLong(_window, ExtendedStyle, _originalExtendedStyle);
-            return;
-        }
-        _hiddenByUs = true;
-        AppLog.Debug("Pip", $"浮窗 0x{_window:X} 临时隐藏。");
+        _frame?.Hide();
+        if (closeVideo && PipWindowService.IsPipWindow(_window, BrowserProcessId, includeHidden: true))
+            _frame?.CloseVideo();
+        _frame?.ReleaseVideo(restoreVideo: !closeVideo);
+        _hiddenByUs = false;
     }
 
-    public void Suspend()
+    public void Suspend() => StopTracking(closeVideo: false);
+
+    private void StopTracking(bool closeVideo)
     {
         _timer.Stop();
-        _frame?.Hide();
-        Restore();
+        ReleaseFrame(closeVideo);
         if (BrowserProcessId != 0) AppLog.Info("Pip", "停止跟踪浮窗显隐。");
         _window = 0;
         BrowserProcessId = 0;
     }
 
-    private void Restore()
-    {
-        if (_hiddenByUs && PipWindowService.IsPipWindow(_window, BrowserProcessId, includeHidden: true))
-        {
-            if ((_originalExtendedStyle & Layered) != 0)
-                SetLayeredWindowAttributes(_window, _originalColorKey, _originalAlpha, _originalLayeredFlags);
-            else
-                SetLayeredWindowAttributes(_window, 0, 255, Alpha);
-            // Preserve any other style changes Chrome made while the window was transparent.
-            var current = GetWindowLong(_window, ExtendedStyle);
-            SetWindowLong(_window, ExtendedStyle,
-                (current & ~(Layered | Transparent)) | (_originalExtendedStyle & (Layered | Transparent)));
-        }
-        if (_hiddenByUs) AppLog.Debug("Pip", $"浮窗 0x{_window:X} 恢复显示。");
-        _hiddenByUs = false;
-    }
-
     public void Dispose()
     {
         if (_disposed) return;
-        Suspend();
+        StopTracking(closeVideo: true);
         _disposed = true;
         _frame?.Close();
         _frame = null;
     }
 
-    [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
-    [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
-    [DllImport("user32.dll")] private static extern bool GetWindowRect(nint window, out Rect bounds);
-    [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point cursor);
-    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint window);
-    [DllImport("user32.dll")] private static extern int GetWindowLong(nint window, int index);
-    [DllImport("user32.dll", SetLastError = true)] private static extern int SetWindowLong(nint window, int index, int value);
-    [DllImport("user32.dll")] private static extern bool GetLayeredWindowAttributes(nint window, out uint colorKey, out byte alpha, out uint flags);
-    [DllImport("user32.dll")] private static extern bool SetLayeredWindowAttributes(nint window, uint colorKey, byte alpha, uint flags);
+    [StructLayout(LayoutKind.Sequential)] private struct Bounds { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)] private struct ScreenPoint { public int X, Y; }
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(nint window, out Bounds bounds);
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out ScreenPoint cursor);
 }
