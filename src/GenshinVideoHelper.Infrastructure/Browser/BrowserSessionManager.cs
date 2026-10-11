@@ -85,6 +85,7 @@ public sealed class BrowserSessionManager : IBrowserSession, IBrowserWarmup, IBr
                 {
                     request.Token.ThrowIfCancellationRequested();
                     if (_closed || version != _version || _active != session) throw new OperationCanceledException(request.Token);
+                    _pages.Clear();
                     _pages[page.Id] = page;
                 }
                 return page;

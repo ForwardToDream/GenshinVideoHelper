@@ -100,6 +100,106 @@ internal static class BrowserTests
         Check(closedReported, "Report closed tab");
         Console.WriteLine("Closed-tab recovery error passed.");
         await TestAccountProbeAsync(root);
+        await TestSingleVideoPageAsync(root);
+    }
+
+    private static async Task TestSingleVideoPageAsync(string root)
+    {
+        await using var fixture = await ChromiumFixture.StartAsync(root, headed: false);
+        using var cdp = new CdpClient(reuseConnections: true);
+        var browser = SmokeBrowser.Create(fixture.ProfileDirectory);
+        using var manager = new BrowserSessionManager(new AppSettings { BrowserPreference = SmokeBrowser.Preference },
+            new BrowserCatalog(), _ => browser);
+        Exception? interceptionError = null;
+        var document = Convert.ToBase64String(Encoding.UTF8.GetBytes("<!doctype html><title>Single video fixture</title>"));
+        cdp.EventReceived += (endpoint, name, data) =>
+        {
+            if (name == "Fetch.requestPaused") _ = FulfillAsync(endpoint, data.GetProperty("requestId").GetString()!);
+        };
+        async Task FulfillAsync(Uri endpoint, string id)
+        {
+            try
+            {
+                await cdp.SendAsync(endpoint, "Fetch.fulfillRequest", new
+                {
+                    requestId = id, responseCode = 200,
+                    responseHeaders = new[] { new { name = "Content-Type", value = "text/html" } }, body = document
+                });
+            }
+            catch (Exception ex) { interceptionError = ex; }
+        }
+        // Pause new pages before they make network requests; all navigation uses local responses.
+        async Task PauseNewPagesAsync() => _ = await cdp.SendAsync(fixture.BrowserSocket, "Target.setAutoAttach", new
+            { autoAttach = true, waitForDebuggerOnStart = true, flatten = true });
+        await PauseNewPagesAsync();
+        async Task AttachAsync(BrowserPage page, string url)
+        {
+            var endpoint = new Uri(page.WebSocketDebuggerUrl);
+            await cdp.SendAsync(endpoint, "Fetch.enable", new { patterns = new[] { new { urlPattern = "*", resourceType = "Document" } } });
+            await cdp.SendAsync(fixture.BrowserSocket, "Target.setAutoAttach", new
+                { autoAttach = false, waitForDebuggerOnStart = false, flatten = true });
+            await cdp.SendAsync(endpoint, "Runtime.runIfWaitingForDebugger", new { });
+            await cdp.SendAsync(endpoint, "Page.navigate", new { url });
+        }
+        async Task ReadyAsync(string id, VideoIdentity identity)
+        {
+            for (var attempt = 0; attempt < 60; attempt++)
+            {
+                if (interceptionError is not null) throw interceptionError;
+                var page = await browser.GetPageAsync(id);
+                if (page is not null && VideoIdentity.TryParse(page.Url, out var actual) && actual == identity)
+                {
+                    var result = await cdp.SendAsync(new Uri(page.WebSocketDebuggerUrl), "Runtime.evaluate",
+                        new { expression = "document.title === 'Single video fixture'", returnByValue = true });
+                    if (result.GetProperty("result").TryGetProperty("value", out var value) && value.ValueKind == JsonValueKind.True) return;
+                }
+                await Task.Delay(50);
+            }
+            throw new TimeoutException("Single-video fixture did not finish navigation.");
+        }
+        try
+        {
+            var firstIdentity = new VideoIdentity("BV1MXfEY4EQ2", 2);
+            var first = await manager.OpenAsync(firstIdentity.Url);
+            await AttachAsync(first, firstIdentity.Url);
+            await ReadyAsync(first.Id, firstIdentity);
+            await cdp.SendAsync(new Uri(first.WebSocketDebuggerUrl), "Runtime.evaluate", new { expression = "window.followSentinel = 17" });
+            for (var i = 0; i < 3; i++)
+                Check((await manager.OpenAsync(firstIdentity.Url)).Id == first.Id, "Repeated follow reuses the video target");
+            var sentinel = await cdp.SendAsync(new Uri(first.WebSocketDebuggerUrl), "Runtime.evaluate",
+                new { expression = "window.followSentinel", returnByValue = true });
+            Check(sentinel.GetProperty("result").GetProperty("value").GetInt32() == 17, "Following the same video does not reload it");
+            var selected = new VideoIdentity("BV1hjgG6jEa6", 3);
+            var requests = Enumerable.Range(0, 12).Select(i => manager.OpenAsync(i == 11 ? selected.Url : firstIdentity.Url)).ToArray();
+            foreach (var request in requests)
+            {
+                try { Check((await request).Id == first.Id, "Rapid follow requests retain the same video target"); }
+                catch (OperationCanceledException) { }
+            }
+            Check((await requests[^1]).Id == first.Id, "The latest follow request wins");
+            await ReadyAsync(first.Id, selected);
+            // A previous version could leave extra video windows in this dedicated profile.
+            await PauseNewPagesAsync();
+            var legacy = await cdp.SendAsync(fixture.BrowserSocket, "Target.createTarget", new { url = firstIdentity.Url });
+            var extraId = legacy.GetProperty("targetId").GetString()!;
+            var extra = await browser.GetPageAsync(extraId) ?? throw new InvalidOperationException("Extra fixture page was not created.");
+            await AttachAsync(extra, firstIdentity.Url);
+            await ReadyAsync(extraId, firstIdentity);
+            await manager.OpenAsync(selected.Url);
+            var targets = await cdp.SendAsync(fixture.BrowserSocket, "Target.getTargets", new { });
+            Check(targets.GetProperty("targetInfos").EnumerateArray().Count(t => t.GetProperty("type").GetString() == "page" &&
+                VideoIdentity.TryParse(t.GetProperty("url").GetString(), out _)) == 1, "Only one guide video remains, including after old duplicate windows");
+            Check(targets.GetProperty("targetInfos").EnumerateArray().Any(t => t.GetProperty("targetId").GetString() == fixture.Page.Id),
+                "Unrelated pages are preserved");
+            await cdp.SendAsync(fixture.BrowserSocket, "Target.closeTarget", new { targetId = first.Id });
+            await PauseNewPagesAsync();
+            var reopened = await manager.OpenAsync(selected.Url);
+            Check(reopened.Id != first.Id && await manager.GetPageAsync(first.Id) is null, "A manually closed video is replaced without retaining its old session page");
+            await AttachAsync(reopened, selected.Url);
+            await ReadyAsync(reopened.Id, selected);
+            Console.WriteLine($"{SmokeBrowser.Kind}: repeated follow, rapid requests, video replacement, old duplicate cleanup and closed-page recovery passed.");
+        }
+        finally { await manager.CloseAsync(); }
     }
 
     private static async Task TestAccountProbeAsync(string root)

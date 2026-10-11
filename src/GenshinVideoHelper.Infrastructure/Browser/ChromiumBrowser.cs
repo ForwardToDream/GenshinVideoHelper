@@ -20,6 +20,7 @@ public sealed class ChromiumBrowser : IBrowserSession, IBrowserWarmup, IBrowserW
     private bool _closing;
     private readonly CancellationTokenSource _shutdown = new();
     private Uri? _browserSocket;
+    private string? _videoTargetId;
     private Process? _ownedBrowser;
     private string? _failedEndpoint;
     private long _retryEndpointAfter;
@@ -54,9 +55,33 @@ public sealed class ChromiumBrowser : IBrowserSession, IBrowserWarmup, IBrowserW
             token = linked.Token;
             var started = Stopwatch.GetTimestamp();
             if (!await TryConnectAsync(token)) await LaunchAsync(token);
-            var reply = await _client.SendAsync(await GetBrowserSocketAsync(token), "Target.createTarget",
-                new { url = url.AbsoluteUri, newWindow = true, background = true, windowState = "minimized" }, token);
-            var page = await WaitForPageAsync(reply.GetProperty("targetId").GetString(), url.AbsoluteUri, token);
+            var pages = await GetAllPagesAsync(token);
+            var page = pages.FirstOrDefault(p => p.Id == _videoTargetId)
+                ?? pages.FirstOrDefault(p => VideoIdentity.TryParse(p.Url, out _));
+            // Also clean up video pages left by an older run, only in this dedicated profile.
+            foreach (var extra in pages.Where(p => p.Id != page?.Id && VideoIdentity.TryParse(p.Url, out _)))
+                await _client.SendAsync(await GetBrowserSocketAsync(token), "Target.closeTarget", new { targetId = extra.Id }, token);
+            if (page is null)
+            {
+                token.ThrowIfCancellationRequested();
+                // Record the created target even if another follow request cancels this one.
+                // Otherwise a canceled reply can leave an untracked, playing window behind.
+                var reply = await _client.SendAsync(await GetBrowserSocketAsync(token), "Target.createTarget",
+                    new { url = url.AbsoluteUri, newWindow = true, background = true, windowState = "minimized" }, _shutdown.Token);
+                _videoTargetId = reply.GetProperty("targetId").GetString();
+                page = await WaitForPageAsync(_videoTargetId, url.AbsoluteUri, token);
+            }
+            else
+            {
+                _videoTargetId = page.Id;
+                if (!VideoIdentity.TryParse(page.Url, out var current) ||
+                    !VideoIdentity.TryParse(url.AbsoluteUri, out var requested) || current != requested)
+                {
+                    await NavigatePageAsync(page, url.AbsoluteUri, token);
+                    page = page with { Url = url.AbsoluteUri };
+                }
+            }
+            token.ThrowIfCancellationRequested();
             AppLog.Info(_installation.DisplayName, $"已打开页面 {page.Id}：{url.AbsoluteUri}，{Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms。");
             return page;
         }
@@ -109,7 +134,7 @@ public sealed class ChromiumBrowser : IBrowserSession, IBrowserWarmup, IBrowserW
         VideoIdentity.TryParse(url, out var identity);
         for (var attempt = 0; attempt < 100; attempt++)
         {
-            var pages = await GetPagesAsync(token);
+            var pages = await GetAllPagesAsync(token);
             var page = pages.FirstOrDefault(p => targetId is not null ? p.Id == targetId :
                 p.Url == url || (identity is not null && VideoIdentity.TryParse(p.Url, out var actual) && actual == identity));
             if (page is not null) return page;
@@ -136,13 +161,18 @@ public sealed class ChromiumBrowser : IBrowserSession, IBrowserWarmup, IBrowserW
             ?? throw new InvalidOperationException("视频页面已关闭，请重新开始跟随。");
         if (!IsBilibiliUrl(current.Url) && current.Url is not "" and not "about:blank")
             throw new InvalidOperationException("视频页面已离开 B 站，请重新开始跟随。");
-        var result = await _client.SendAsync(new Uri(current.WebSocketDebuggerUrl), "Page.navigate", new { url = identity.Url }, token);
+        await NavigatePageAsync(current, identity.Url, token);
+    }
+
+    private async Task NavigatePageAsync(BrowserPage page, string url, CancellationToken token)
+    {
+        var result = await _client.SendAsync(new Uri(page.WebSocketDebuggerUrl), "Page.navigate", new { url }, token);
         if (result.TryGetProperty("errorText", out var error))
         {
-            AppLog.Warn(_installation.DisplayName, $"页面 {page.Id} 导航到 {identity.Url} 失败：{error.GetString()}");
+            AppLog.Warn(_installation.DisplayName, $"页面 {page.Id} 导航到 {url} 失败：{error.GetString()}");
             throw new IOException(error.GetString());
         }
-        AppLog.Info(_installation.DisplayName, $"页面 {page.Id} 导航到 {identity.Url}。");
+        AppLog.Info(_installation.DisplayName, $"页面 {page.Id} 导航到 {url}。");
     }
 
     public async Task<IReadOnlyList<BrowserPage>> GetPagesAsync(CancellationToken token = default)
