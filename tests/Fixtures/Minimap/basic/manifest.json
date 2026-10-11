@@ -1,0 +1,138 @@
+{
+  "sources": {
+    "user": "Recording 2026-10-11 094750.mp4",
+    "guide": "BV1MXfEY4EQ2 P2 17:08-18:06"
+  },
+  "samples": [
+    {
+      "id": "user-start",
+      "file": "images/user-start.png",
+      "source_size": [
+        3840,
+        2160
+      ],
+      "original_file": "images/user/frame-0000.png",
+      "sha256": "7d11cb1d89f4ba9741bb5327b3f312acbe3b6bac720f08ba175cd3a44491d6af",
+      "expected_disk": {
+        "x": 338.3542094455852,
+        "y": 251.52053388090349,
+        "radius": 207.0399932861328
+      }
+    },
+    {
+      "id": "user-three-seconds",
+      "file": "images/user-three-seconds.png",
+      "source_size": [
+        3840,
+        2160
+      ],
+      "original_file": "images/user/frame-0090.png",
+      "sha256": "e01be557c851f8e6195c3f8a80f7ddd93723e12f7b3aff6df5851202fb751b61",
+      "expected_disk": {
+        "x": 336.8156028368794,
+        "y": 246.08308004052685,
+        "radius": 209.0399932861328
+      }
+    },
+    {
+      "id": "guide-start",
+      "file": "images/guide-start.png",
+      "source_size": [
+        1920,
+        1080
+      ],
+      "original_file": "images/guide/t-1028.000.png",
+      "sha256": "0fa3aafbff030975a251284bb02ad8e14ec577fe50ae4ed37e0afb4f460c7c4f",
+      "expected_disk": {
+        "x": 241.62290502793297,
+        "y": 247.56075418994413,
+        "radius": 241.75723266601562
+      }
+    },
+    {
+      "id": "guide-five-seconds",
+      "file": "images/guide-five-seconds.png",
+      "source_size": [
+        1920,
+        1080
+      ],
+      "original_file": "images/guide/t-1033.000.png",
+      "sha256": "d922b90ddae142dfd3953e6d17cff32ac175c06206dc67ed94bfc13042b67f01",
+      "expected_disk": {
+        "x": 241.8847481021394,
+        "y": 247.41890959282264,
+        "radius": 240.01046752929688
+      }
+    },
+    {
+      "id": "enlarged-shifted",
+      "file": "images/enlarged-shifted.png",
+      "source_size": [
+        3840,
+        2160
+      ],
+      "original_file": "images/controls/positive/moved-560-1.png",
+      "sha256": "ff09047abbb3fdfc004e752ce2cdebbbcea98748a4036f34c8fca6d6eb50fe8a",
+      "expected_disk": {
+        "x": 953.2889283599764,
+        "y": 286.2314979277679,
+        "radius": 277.97552490234375
+      }
+    },
+    {
+      "id": "black",
+      "file": "images/black.png",
+      "source_size": [
+        3840,
+        2160
+      ],
+      "original_file": "images/controls/negative/black.png",
+      "sha256": "39d32379e913f73948b43d0bacadc722bd361d3aa0822258528de4aa822d1cbf",
+      "expected_disk": null
+    },
+    {
+      "id": "undersized",
+      "file": "images/undersized.png",
+      "source_size": [
+        3840,
+        2160
+      ],
+      "original_file": "images/controls/negative/undersized-260.png",
+      "sha256": "2f76395b08d0ffb8ef17f2ae91edff4612312fa32fd39566f8d0f94cd3a49c5a",
+      "expected_disk": null
+    },
+    {
+      "id": "arrow-missing",
+      "file": "images/arrow-missing.png",
+      "source_size": [
+        3840,
+        2160
+      ],
+      "original_file": "images/controls/arrow-missing/map-arrow-removed.png",
+      "sha256": "14b645e8237c97e0f66bdd558ebbcf42e91539aec877f1de655ddf86a0019ff4",
+      "expected_disk": null
+    }
+  ],
+  "pairs": [
+    {
+      "id": "user-three-seconds",
+      "guide": "user-start",
+      "user": "user-three-seconds",
+      "fixed_user_hud": true,
+      "expected_normalized_point": [
+        113.00346775574455,
+        102.54419999597576
+      ]
+    },
+    {
+      "id": "guide-five-seconds",
+      "guide": "guide-start",
+      "user": "guide-five-seconds",
+      "fixed_user_hud": false,
+      "expected_normalized_point": [
+        102.63125112861087,
+        106.20811847534537
+      ]
+    }
+  ]
+}

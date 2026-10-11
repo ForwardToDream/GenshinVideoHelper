@@ -16,5 +16,5 @@ GenshinVideoHelper.progress.json.*
 
 **/.gvh/
 
-# Large local vision images; keep indexes and expected results in Git.
-tests/Fixtures/Minimap/images/
+# Local full corpus; basic regression resources are versioned.
+tests/Fixtures/Minimap/full/

@@ -11,7 +11,6 @@ internal static class Program
             var root = args.Length > 1 ? Path.GetFullPath(args[1]) : Directory.GetCurrentDirectory();
             TestArtifacts.SweepStale(root);
             if (args.Contains("--vision-browser")) VisionTests.RunBrowser(root);
-            else if (args.Contains("--vision-algorithms")) VisionAlgorithmTests.Run(root);
             else if (args.Contains("--vision")) VisionTests.Run(root);
             else if (args.Contains("--login")) LoginTests.Run(root);
             else if (args.Contains("--render-ui")) RenderUi(root);

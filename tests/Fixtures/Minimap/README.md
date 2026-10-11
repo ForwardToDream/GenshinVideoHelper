@@ -1,17 +1,14 @@
 # 小地图视觉回归资源
 
-用于测试生产 C# 的圆盘定位和 ORB 双端定位，不需要 Chrome、原神或联网。
+- `basic/`：8 张原生 PNG 和 `manifest.json`，纳入 Git；包含真实用户/攻略帧、放大偏移、全黑、尺寸不足和箭头缺失。所有视觉回归都必须测试它们。
+- `full/`：本地完整包（`images/`、`indexes/`、`expected/`），813 张图片，约 470MB，Git 忽略。存在时自动追加完整回归；缺文件或坏图会失败，目录不存在才跳过。
 
-- `images/`：813 张原生 PNG（用户、攻略和控制样本），约 470MB，本地保存并由 Git 忽略。
-- `indexes/`：图片、采样时刻和来源索引。
-- `expected/`：已认可的 arrow_first 固定输出；运行测试不会更新它们。
-
-用户样本来自 `Recording 2026-10-11 094750.mp4`；攻略样本来自汉卿导航 `BV1MXfEY4EQ2` P2 的 17:08–18:06。原始录像、实验脚本和实验输出保留在 `experiments`，本测试只读取这里的资源。换电脑运行此专项时，需要一起复制 `images/`。
-
-在项目根目录运行：
+普通 `dotnet test GenshinVideoHelper.sln -c Release` 已包含这两类回归。只跑视觉算法：
 
 ```powershell
 .\scripts\test.ps1 -VisionAlgorithms
 ```
 
-临时结果写入 `artifacts/test-run`，结束后删除；生成的浏览器测试视频和界面截图继续放在 `artifacts`。
+测试位于 `GenshinVideoHelper.Infrastructure.Tests/Vision`。小样本随测试项目复制到输出目录，无需 Chrome、原神、原始录像或 `experiments`。期望结果固定保存，运行测试不会更新。其他开发者克隆仓库即可测小样本；复制整个 `full/` 包后自动扩展。
+
+来源：用户录屏 `Recording 2026-10-11 094750.mp4`，汉卿导航 `BV1MXfEY4EQ2` P2 17:08–18:06。原始录像与实验脚本留在 `experiments`。
