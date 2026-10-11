@@ -56,6 +56,12 @@ public interface IVideoActivitySource
     event Action<string>? MediaActivity;
 }
 
+// Only events that change frame identity/crop, not pause, play or playback rate.
+public interface IVideoFrameInvalidationSource
+{
+    event Action<string>? VideoFrameInvalidated;
+}
+
 public sealed record BilibiliAccountState(string Url, bool? LoggedIn, int VideoWidth, int VideoHeight);
 
 public interface IBilibiliAccountService

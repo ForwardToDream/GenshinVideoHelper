@@ -22,10 +22,16 @@ public sealed class MinimapOverlay : IDisposable
     private long _capturedAt;
     private bool _visible;
     private readonly DispatcherTimer _watchdog=new(){Interval=TimeSpan.FromMilliseconds(40)};
+    public bool IsVisible => _visible;
     public MinimapOverlay(){_watchdog.Tick+=CheckVisibility;}
     public void Update(VisionUpdate update,int markerSize)
     {
-        if(update.Marker is not {} marker || GameWindowCapture.GetForegroundWindow()!=update.Window ||
+        if(update.Marker is not {} marker)
+        {
+            if(!update.RetainMarker || GameWindowCapture.GetForegroundWindow()!=_game)Hide();
+            return; // Do not renew the timestamp of the last trusted frame.
+        }
+        if(GameWindowCapture.GetForegroundWindow()!=update.Window ||
             Stopwatch.GetElapsedTime(update.CapturedAt).TotalMilliseconds>250) {Hide();return;}
         _game=update.Window;_capturedAt=update.CapturedAt;
         var origin=new Point();GameWindowCapture.ClientToScreen(_game,ref origin);

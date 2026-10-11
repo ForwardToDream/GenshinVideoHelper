@@ -22,7 +22,7 @@ public partial class MainWindow
     {
         var options=_settings.Vision;options.Normalize();
         VisionEnabled.IsChecked=options.Enabled;VisionDirection.IsChecked=options.ShowDirection;
-        SelectVisionOption(VisionInterval,options.IntervalMs);SelectVisionOption(VisionSearchInterval,options.SearchIntervalMs);SelectVisionOption(VisionMarkerSize,options.MarkerSize);
+        SelectVisionOption(VisionInterval,options.IntervalMs);SelectVisionOption(VisionMarkerSize,options.MarkerSize);
         _visionReady=true;
         _visionWindowCheck.Tick+=(_,_)=>UpdateVisionIntent();
         UpdateVisionIntent();
@@ -39,7 +39,6 @@ public partial class MainWindow
         var settings=_settings.Vision;
         settings.Enabled=VisionEnabled.IsChecked==true;settings.ShowDirection=VisionDirection.IsChecked==true;
         if(VisionInterval.SelectedItem is ComboBoxItem interval)settings.IntervalMs=Convert.ToInt32(interval.Tag);
-        if(VisionSearchInterval.SelectedItem is ComboBoxItem search)settings.SearchIntervalMs=Convert.ToInt32(search.Tag);
         if(VisionMarkerSize.SelectedItem is ComboBoxItem marker)settings.MarkerSize=Convert.ToInt32(marker.Tag);
         settings.Normalize();SaveSettings();UpdateVisionIntent();
     }
@@ -66,7 +65,7 @@ public partial class MainWindow
             var vision=Services.EnsureVision();
             if(vision is null){VisionStatus.Text="当前视频源不支持地图采集";return;}
             if(!_visionSubscribed){vision.Updated+=OnVisionUpdate;_visionSubscribed=true;}
-            vision.Configure(new(page,request.Identity,request.Version,_gameWindow,settings.IntervalMs,settings.SearchIntervalMs,settings.ShowDirection));
+            vision.Configure(new(page,request.Identity,request.Version,_gameWindow,settings.IntervalMs,settings.ShowDirection));
         }
         catch(Exception ex){AppLog.Warn("Vision","无法启用地图识别",ex);VisionStatus.Text=$"无法启用：{ex.Message}";_mapOverlay?.Hide();}
     }
@@ -83,8 +82,8 @@ public partial class MainWindow
             VisionStatus.Text=latest.Status;
             try
             {
-                if(latest.Marker is null)_mapOverlay?.Hide();
-                else (_mapOverlay??=new()).Update(latest,_settings.Vision.MarkerSize);
+                if(latest.Marker is not null || _mapOverlay is not null)
+                    (_mapOverlay??=new()).Update(latest,_settings.Vision.MarkerSize);
             }
             catch(Exception ex){_mapOverlay?.Hide();AppLog.Warn("Vision","标记窗口更新失败",ex);VisionStatus.Text="标记窗口暂不可用";}
             if(Stopwatch.GetElapsedTime(_visionMetricsAt).TotalMilliseconds>=500)

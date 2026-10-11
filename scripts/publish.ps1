@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $taskRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $artifacts = Join-Path $taskRoot 'artifacts'
 $destination = Join-Path $artifacts 'GenshinVideoHelper'

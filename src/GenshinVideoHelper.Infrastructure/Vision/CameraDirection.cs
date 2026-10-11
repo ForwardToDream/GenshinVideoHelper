@@ -35,7 +35,7 @@ public sealed class CameraDirection : IDisposable
         if(Math.Abs(determinant)<.2) return null;
         double t=((s.X-f.X)*s.Dy-(s.Y-f.Y)*s.Dx)/determinant;
         double x=f.X+t*f.Dx,y=f.Y+t*f.Dy;
-        if(DiskDetector.Distance(x,y,106,106)>=10) return null;
+        if(MinimapImage.Distance(x,y,106,106)>=10) return null;
         double ux=f.X-x,uy=f.Y-y,vx=s.X-x,vy=s.Y-y;
         double ul=Math.Sqrt(ux*ux+uy*uy),vl=Math.Sqrt(vx*vx+vy*vy);
         if(ul<1 || vl<1) return null;

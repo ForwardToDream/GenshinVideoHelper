@@ -16,50 +16,6 @@ using OpenCvSharp;
 namespace GenshinVideoHelper.Smoke;
 internal static class VisionTests
 {
-    public static void Baseline(string root)
-    {
-        var output=Path.Combine(root,"artifacts","vision-baseline");
-        var inputs=JsonDocument.Parse(File.ReadAllText(Path.Combine(output,"inputs.json")));
-        using var analyzer=new MinimapAnalyzer();var rows=new List<object>();int inside=0,found=0,accurate=0,outsideOutputs=0,negativeAccepted=0;
-        var coldTimes=new List<double>();var hotTimes=new List<double>();
-        foreach(var item in inputs.RootElement.EnumerateArray())
-        {
-            string id=item.GetProperty("id").GetString()!;
-            using var full=Cv2.ImRead(item.GetProperty("path").GetString()!);
-            using var f=new VisionFrame(full.Width,full.Height,3,full.Width,full.Height,new(0,0,full.Width,full.Height),id);
-            Marshal.Copy(full.Data,f.Pixels,0,f.Width*f.Height*3);
-            var truth=item.GetProperty("gt");bool positive=truth.ValueKind==JsonValueKind.Array;
-            bool inScope=positive&&truth[0].GetDouble()<full.Width/2&&truth[1].GetDouble()<full.Height/2;
-            if(inScope)inside++;
-            MapDisk? disk=null;var times=new List<double>();
-            for(int i=0;i<4;i++){var t=Stopwatch.GetTimestamp();disk=DiskDetector.Detect(full,f);if(i>0)times.Add(Stopwatch.GetElapsedTime(t).TotalMilliseconds);}
-            times.Sort();coldTimes.Add(times[1]);double? error=null,radiusError=null;
-            if(disk is {} d&&inScope){found++;error=DiskDetector.Distance(d.X,d.Y,truth[0].GetDouble(),truth[1].GetDouble())*100/truth[2].GetDouble();radiusError=Math.Abs(d.Radius-truth[2].GetDouble())*100/truth[2].GetDouble();if(error<3&&radiusError<6)accurate++;}
-            if(disk is not null&&positive&&!inScope)outsideOutputs++;
-            analyzer.Reset();var result=analyzer.Analyze(f,f,false,1000);
-            if(result.Marker is not null&&!positive)negativeAccepted++;
-            if(result.Marker is not null)
-            {
-                var hot=new List<double>();for(int i=0;i<10;i++){var start=Stopwatch.GetTimestamp();result=analyzer.Analyze(f,f,true,1000);hot.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);}hot.Sort();hotTimes.Add(hot[5]);
-            }
-            rows.Add(new{id,inScope,disk,error,radiusError,coldMs=times[1],accepted=result.Marker is not null,status=result.Status});
-        }
-        var exp=Path.Combine(root,"experiments","minimap-follow");
-        using var labels=JsonDocument.Parse(File.ReadAllText(Path.Combine(exp,"data","camera-labels.json")));
-        using var frames=JsonDocument.Parse(File.ReadAllText(Path.Combine(exp,"data","frames.json")));
-        using var direction=new CameraDirection();var angles=new List<object>();int accepted=0,bad=0;
-        foreach(var label in labels.RootElement.GetProperty("labels").EnumerateObject())
-        {
-            var metadata=frames.RootElement.EnumerateArray().First(f=>f.GetProperty("id").GetString()==label.Name);
-            using var native=Cv2.ImRead(Path.Combine(exp,metadata.GetProperty("file").GetString()!));using var image=new Mat();Cv2.Resize(native,image,new OpenCvSharp.Size(212,212));
-            var prediction=direction.Detect(image);double? error=prediction is {} a?MapProjection.AngularDistance(a*180/Math.PI,label.Value.GetDouble()):null;
-            if(error.HasValue){accepted++;if(error>5)bad++;}angles.Add(new{id=label.Name,degrees=prediction*180/Math.PI,error});
-        }
-        var summary=new{inside,found,accurate,outsideOutputs,negativeAccepted,coldMedian=Median(coldTimes),hotPairMedian=Median(hotTimes),cameraAccepted=accepted,cameraErrorsOver5=bad};
-        File.WriteAllText(Path.Combine(output,"csharp-results.json"),JsonSerializer.Serialize(new{summary,rows,angles},new JsonSerializerOptions{WriteIndented=true}));
-        Console.WriteLine(JsonSerializer.Serialize(summary));
-        Check(outsideOutputs==0&&negativeAccepted==0,"Scope and negative gates");Check(accurate>=10,"Circle port retains baseline coverage");Check(bad==0&&accepted>=10,"Camera accepts accurate native directions");
-    }
     private static double Median(List<double> values){values.Sort();return values.Count==0?0:values[values.Count/2];}
     public static void Run(string root)
     {
@@ -72,7 +28,9 @@ internal static class VisionTests
         {
             try
             {
+                await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
                 fixture.Activate();animation.Start();var hwnd=new WindowInteropHelper(fixture).Handle;
+                Check(GameWindowCapture.GetForegroundWindow()==hwnd,"Desktop capture fixture requires foreground access");
                 await CaptureWindowAsync(hwnd);
                 await BrowserAsync(root);
             }
@@ -81,6 +39,7 @@ internal static class VisionTests
         };
         fixture.Show();app.Run();if(failure is not null)System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
     }
+    public static void RunBrowser(string root) => BrowserAsync(root).GetAwaiter().GetResult();
     private static async Task CaptureWindowAsync(nint hwnd)
     {
         var timings=new List<double>();VisionUpdate? marker=null;
@@ -95,13 +54,19 @@ internal static class VisionTests
                 {
                     Check(frame.Pixels[30*frame.Stride+30*4+1]>=120&&frame.Pixels[30*frame.Stride+30*4+1]<=140,"WGC captures selected client pixels");
                     Check(Stopwatch.GetElapsedTime(frame.CapturedAt).TotalMilliseconds<250,"WGC timestamps share monotonic clock");
-                    if(count>0){Check(frame.Width==120&&frame.Height==120,"GPU copies only requested ROI");timings.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);}
+                    if(count>0){Check(frame.Region==MinimapGeometry.GameCaptureRegion(frame.SourceWidth,frame.SourceHeight),"GPU copies only fixed user HUD ROI");timings.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);}
                     plan=new(new(10,10,120,120),frame.Epoch);count++;
                     marker=new(1,"test",new(80,80,0,0xff00ff,new(80,80,70)),hwnd,frame.CapturedAt);
                 }
                 await Task.Delay(50);
             }
+            Console.WriteLine($"WGC received {count} frames; fixture foreground={capture.IsForeground(hwnd)}; foreground HWND={GameWindowCapture.GetForegroundWindow()}; fixture HWND={hwnd}");
             Check(count>=10,"WGC yields consecutive fresh frames");
+            // Reproduce the old one-second failure backoff without consuming the two-buffer pool.
+            await Task.Delay(1100);
+            using var afterIdle=await capture.CaptureAsync(hwnd,plan,CancellationToken.None);
+            Check(afterIdle is not null && Stopwatch.GetElapsedTime(afterIdle.CapturedAt).TotalMilliseconds<250,
+                "WGC discards queued old frames and recovers after a long sampling gap");
         });
         using var overlay=new MinimapOverlay();
         var time=Stopwatch.GetTimestamp();overlay.Update(marker! with{CapturedAt=Stopwatch.GetTimestamp()},5);
@@ -110,7 +75,17 @@ internal static class VisionTests
         var redraw=new List<double>();
         for(int i=0;i<30;i++){var start=Stopwatch.GetTimestamp();overlay.Update(marker! with{CapturedAt=Stopwatch.GetTimestamp(),Marker=marker!.Marker! with{X=80+i*.1}},5);redraw.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);}
         Console.WriteLine($"Overlay redraw median {Median(redraw):F3} ms");
-        await Task.Delay(100);overlay.Hide();
+        overlay.Update(marker! with{CapturedAt=Stopwatch.GetTimestamp()},5);
+        overlay.Update(new(1,"transient",RetainMarker:true),5);
+        Check(overlay.IsVisible,"One transient miss does not hide a current marker");
+        await Task.Delay(160);
+        overlay.Update(new(1,"transient",CapturedAt:Stopwatch.GetTimestamp(),RetainMarker:true),5);
+        await Task.Delay(160);
+        Check(!overlay.IsVisible,"Repeated transient misses never renew the old marker timestamp");
+        overlay.Update(marker! with{CapturedAt=Stopwatch.GetTimestamp()},5);
+        Check(overlay.IsVisible,"Fresh reliable frame restores marker");
+        overlay.Update(new(1,"black map"),5);
+        Check(!overlay.IsVisible,"Hard rejection hides the marker immediately");
     }
     private static async Task BrowserAsync(string root)
     {
@@ -120,7 +95,8 @@ internal static class VisionTests
         int port=((System.Net.IPEndPoint)portProbe.LocalEndpoint).Port;portProbe.Stop();
         using var server=new System.Net.HttpListener();server.Prefixes.Add($"http://127.0.0.1:{port}/");server.Start();
         byte[] media=await File.ReadAllBytesAsync(Path.Combine(root,"artifacts","test-media","sample.mp4"));
-        var serve=Task.Run(async()=>{try{while(server.IsListening){var request=await server.GetContextAsync();bool mp4=request.Request.RawUrl!.Contains(".mp4");byte[] body=mp4?media:System.Text.Encoding.UTF8.GetBytes("<video muted autoplay style='width:320px' src='/sample.mp4'></video>");request.Response.ContentType=mp4?"video/mp4":"text/html";request.Response.ContentLength64=body.Length;await request.Response.OutputStream.WriteAsync(body);request.Response.Close();}}catch(Exception)when(!server.IsListening){}});
+        int serverStopping=0;
+        var serve=Task.Run(async()=>{try{while(server.IsListening){var request=await server.GetContextAsync();bool mp4=request.Request.RawUrl!.Contains(".mp4");byte[] body=mp4?media:System.Text.Encoding.UTF8.GetBytes("<video muted autoplay style='width:320px' src='/sample.mp4'></video>");request.Response.ContentType=mp4?"video/mp4":"text/html";request.Response.ContentLength64=body.Length;await request.Response.OutputStream.WriteAsync(body);request.Response.Close();}}catch(Exception)when(Volatile.Read(ref serverStopping)!=0||!server.IsListening){}});
         await using var browser=await ChromeFixture.StartAsync(root,headed:true);
         using var client=new CdpClient(reuseConnections:true);
         var endpoint=new Uri(browser.Page.WebSocketDebuggerUrl);
@@ -128,11 +104,25 @@ internal static class VisionTests
         using var video=new VideoController();
         for(int i=0;i<30;i++){try{await video.ExecuteAsync(browser.Page,new("ensurePlay"));await video.ExecuteAsync(browser.Page,new("ensurePip"));break;}catch(InvalidOperationException){await Task.Delay(100);}}
         var source=video.FrameSource;var identity=new VideoIdentity("BV1hjgG6jEa6",1);
+        await Task.Delay(200);
+        int invalidations=0,activities=0;
+        video.VideoFrameInvalidated+=_=>Interlocked.Increment(ref invalidations);
+        video.MediaActivity+=_=>Interlocked.Increment(ref activities);
         using var cold=await source.CaptureAsync(browser.Page,identity,new(),CancellationToken.None);
-        Check(cold is not null&&cold.SourceWidth==640&&cold.Region.Width==320,"Video samples intrinsic size, not CSS size");
+        Check(cold is not null&&cold.SourceWidth==640&&cold.Region.Width==213&&cold.Width==213&&cold.Height==180,"Video samples intrinsic size, not CSS size");
         using var local=await source.CaptureAsync(browser.Page,identity,new(new(10,20,120,120),cold!.Epoch),CancellationToken.None);
-        Check(local is not null&&local.Width==120&&local.Region.X==10,"Video uses cached source ROI");
+        Check(local is not null&&local.Width==213&&local.Region.X==0,"Guide always uses native one-sixth search ROI");
+        await video.ExecuteAsync(browser.Page,new("toggle"));await Task.Delay(150);
+        await video.ExecuteAsync(browser.Page,new("rate",1.5));await Task.Delay(100);
+        Check(Volatile.Read(ref activities)>=2 && Volatile.Read(ref invalidations)==0,
+            "Pause and speed events update playback without resetting minimap recognition");
+        await client.SendAsync(endpoint,"Runtime.evaluate",new{expression="const ad=document.createElement('video');document.body.append(ad);ad.dispatchEvent(new Event('loadedmetadata',{bubbles:true}));"});
+        await Task.Delay(100);
+        Check(Volatile.Read(ref invalidations)==0,"Unrelated video events do not reset the followed map");
+        using(var paused=await source.CaptureAsync(browser.Page,identity,new(new(10,20,120,120),cold.Epoch),CancellationToken.None))
+            Check(paused is not null&&paused.Epoch==cold.Epoch&&paused.Region.X==0&&paused.Width==213,"Pause and rate preserve native guide search pixels");
         await video.ExecuteAsync(browser.Page,new("seek",3,true));await Task.Delay(150);
+        Check(Volatile.Read(ref invalidations)>0,"Seek immediately invalidates the minimap source");
         using var seek=await source.CaptureAsync(browser.Page,identity,new(new(10,20,120,120),cold.Epoch),CancellationToken.None);
         Check(seek is not null&&seek.Epoch!=cold.Epoch&&seek.Region.X==0,"Seek invalidates crop/epoch");
         using var stale=await source.CaptureAsync(browser.Page,identity with{Part=2},new(),CancellationToken.None);
@@ -140,6 +130,7 @@ internal static class VisionTests
         await video.ExecuteAsync(browser.Page,new("ensurePipClosed"));
         using var closed=await source.CaptureAsync(browser.Page,identity,new(),CancellationToken.None);
         Check(closed is null,"Manually closed PiP stops map capture");
-        server.Stop();await serve;
+        Interlocked.Exchange(ref serverStopping,1);server.Stop();await serve;
+        Console.WriteLine("Video capture: native ROI, pause/rate without reset, unrelated media, seek invalidation, wrong episode and PiP closure passed.");
     }
 }

@@ -8,13 +8,11 @@ public sealed class VisionSettings
 {
     public bool Enabled { get; set; } = true;
     public int IntervalMs { get; set; } = 100;
-    public int SearchIntervalMs { get; set; } = 1000;
     public bool ShowDirection { get; set; } = true;
     public int MarkerSize { get; set; } = 5;
     public void Normalize()
     {
         IntervalMs = Math.Clamp(IntervalMs, 50, 200);
-        SearchIntervalMs = Math.Clamp(SearchIntervalMs, 1000, 5000);
         MarkerSize = Math.Clamp(MarkerSize, 3, 9);
     }
 }
@@ -25,10 +23,10 @@ public readonly record struct MapDisk(double X, double Y, double Radius)
 {
     public FrameRegion CaptureRegion(int width, int height)
     {
-        int x = Math.Max(0, (int)Math.Floor(X - Radius * 1.22));
-        int y = Math.Max(0, (int)Math.Floor(Y - Radius * 1.22));
-        return new(x, y, Math.Max(1, Math.Min(width, (int)Math.Ceiling(X + Radius * 1.22)) - x),
-            Math.Max(1, Math.Min(height, (int)Math.Ceiling(Y + Radius * 1.22)) - y));
+        int x = Math.Max(0, (int)Math.Floor(X - Radius * MinimapGeometry.CropMargin));
+        int y = Math.Max(0, (int)Math.Floor(Y - Radius * MinimapGeometry.CropMargin));
+        return new(x, y, Math.Max(1, Math.Min(width, (int)Math.Ceiling(X + Radius * MinimapGeometry.CropMargin)) - x),
+            Math.Max(1, Math.Min(height, (int)Math.Ceiling(Y + Radius * MinimapGeometry.CropMargin)) - y));
     }
 }
 
@@ -76,16 +74,18 @@ public interface IGameFrameSource : IDisposable
     void Reset();
 }
 public sealed record MapMarker(double X, double Y, double? DirectionRadians, uint Color, MapDisk Disk);
-public sealed record MapAnalysis(string Status, MapMarker? Marker = null, double Correlation = 0, int Inliers = 0);
+// Retain only bridges a transient miss; it never renews the last marker's capture timestamp.
+public sealed record MapAnalysis(string Status, MapMarker? Marker = null, double Correlation = 0, int Inliers = 0,
+    bool RetainMarker = false);
 public interface IMinimapAnalyzer : IDisposable
 {
     CapturePlan VideoPlan { get; }
     CapturePlan GamePlan { get; }
     void Reset();
-    MapAnalysis Analyze(VisionFrame video, VisionFrame game, bool direction, int searchIntervalMs);
+    MapAnalysis Analyze(VisionFrame video, VisionFrame game, bool direction);
 }
 public sealed record VisionUpdate(long Generation, string Status, MapMarker? Marker = null, nint Window = 0,
-    long CapturedAt = 0, double CaptureMs = 0, double AnalysisMs = 0, double Correlation = 0, int Inliers = 0);
+    long CapturedAt = 0, double CaptureMs = 0, double AnalysisMs = 0, double Correlation = 0, int Inliers = 0, bool RetainMarker = false);
 
 public static class MapProjection
 {

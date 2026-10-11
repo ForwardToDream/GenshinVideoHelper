@@ -9,8 +9,17 @@ public sealed class MinimapTests
     [Fact] public void DefaultsAndBounds()
     {
         var s=new VisionSettings();Assert.Equal(100,s.IntervalMs);Assert.True(s.Enabled);
-        s.IntervalMs=1;s.SearchIntervalMs=0;s.MarkerSize=100;s.Normalize();
-        Assert.Equal(50,s.IntervalMs);Assert.Equal(1000,s.SearchIntervalMs);Assert.Equal(9,s.MarkerSize);
+        s.IntervalMs=1;s.MarkerSize=100;s.Normalize();
+        Assert.Equal(50,s.IntervalMs);Assert.Equal(9,s.MarkerSize);
+    }
+    [Theory][InlineData(1080,168,125,106)][InlineData(2160,336,250,212)]
+    public void UserHudIsFixedAndGuideSearchIsOneSixth(int height,double x,double y,double radius)
+    {
+        Assert.Equal(new MapDisk(x,y,radius),MinimapGeometry.GameDisk(height));
+        int width=height*16/9;var guide=MinimapGeometry.GuideSearchRegion(width,height);
+        Assert.Equal(new FrameRegion(0,0,width/3,height/2),guide);
+        var user=MinimapGeometry.GameCaptureRegion(width,height);
+        Assert.True(user.X>0);Assert.True(user.Y>=0);Assert.True(user.Width<width/3);
     }
     [Fact] public void ProjectionRotatesDirectionWithoutTranslation()
     {
@@ -42,12 +51,51 @@ public sealed class MinimapTests
         await analyzer.Entered.Task.WaitAsync(TimeSpan.FromSeconds(3),TestContext.Current.CancellationToken);await coordinator.StopAsync();
         Assert.True(game.Disposed);
     }
-    private static VisionIntent Intent(long version)=>new(new("tab","video","https://www.bilibili.com/video/BV1hjgG6jEa6/","ws://localhost"),new("BV1hjgG6jEa6",1),version,123,100,1000,true);
+    [Fact] public async Task FailedMatchesKeepSamplingAndOnlySameSourceTransientMissesRetainMarker()
+    {
+        var video=new Video();var game=new Game();
+        using var completed=new SemaphoreSlim(0);
+        var updates=new System.Collections.Concurrent.ConcurrentQueue<VisionUpdate>();
+        var analyzer=new SequenceAnalyzer(call=>
+        {
+            if(call==4)video.Epoch="new-episode";
+            return call switch
+            {
+                1 or 3 or 6=>new("matched",new(1,1,null,0xff0000,new(10,10,9))),
+                4=>new("black map"),
+                _=>new("transient",RetainMarker:true)
+            };
+        });
+        using var coordinator=new MinimapFollowCoordinator(video,game,analyzer);
+        coordinator.Updated+=u=>{if(u.Status is "matched" or "transient" or "black map"){updates.Enqueue(u);completed.Release();}};
+        coordinator.Configure(Intent(1));
+        try
+        {
+            for(int i=0;i<6;i++)Assert.True(await completed.WaitAsync(TimeSpan.FromSeconds(3),TestContext.Current.CancellationToken));
+        }
+        finally {await coordinator.StopAsync();}
+        var received=updates.ToArray();
+        Assert.NotNull(received[0].Marker);Assert.True(received[1].RetainMarker);
+        Assert.NotNull(received[2].Marker);Assert.False(received[3].RetainMarker);
+        Assert.False(received[4].RetainMarker);Assert.NotNull(received[5].Marker);
+        var times=analyzer.Times.ToArray();
+        Assert.InRange(Stopwatch.GetElapsedTime(times[1],times[2]).TotalMilliseconds,0,800);
+    }
+    private sealed class SequenceAnalyzer(Func<int,MapAnalysis> next):IMinimapAnalyzer
+    {
+        private int _calls;
+        public System.Collections.Concurrent.ConcurrentQueue<long> Times=[];
+        public CapturePlan VideoPlan=>new();public CapturePlan GamePlan=>new();
+        public void Reset(){}public void Dispose(){}
+        public MapAnalysis Analyze(VisionFrame v,VisionFrame g,bool d)
+        {Times.Enqueue(Stopwatch.GetTimestamp());return next(++_calls);}
+    }
+    private static VisionIntent Intent(long version)=>new(new("tab","video","https://www.bilibili.com/video/BV1hjgG6jEa6/","ws://localhost"),new("BV1hjgG6jEa6",1),version,123,100,true);
     private static VisionFrame Frame()=>new(10,10,3,20,20,new(0,0,10,10),"epoch");
     private sealed class Video:IVideoFrameSource
     {
-        public List<VisionFrame> Frames=[];
-        public Task<VisionFrame?> CaptureAsync(BrowserPage p,VideoIdentity id,CapturePlan plan,CancellationToken token){var f=Frame();Frames.Add(f);return Task.FromResult<VisionFrame?>(f);}
+        public List<VisionFrame> Frames=[];public string Epoch="epoch";
+        public Task<VisionFrame?> CaptureAsync(BrowserPage p,VideoIdentity id,CapturePlan plan,CancellationToken token){var f=new VisionFrame(10,10,3,20,20,new(0,0,10,10),Epoch);Frames.Add(f);return Task.FromResult<VisionFrame?>(f);}
     }
     private sealed class Game:IGameFrameSource
     {
@@ -62,7 +110,7 @@ public sealed class MinimapTests
         public TaskCompletionSource Entered=new(TaskCreationOptions.RunContinuationsAsynchronously);
         public ManualResetEventSlim Release=new();public bool Disposed;public int Calls;
         public void Reset(){}public void Dispose(){Disposed=true;Release.Dispose();}
-        public MapAnalysis Analyze(VisionFrame v,VisionFrame g,bool d,int search)
+        public MapAnalysis Analyze(VisionFrame v,VisionFrame g,bool d)
         {Calls++;Entered.TrySetResult();Release.Wait(TimeSpan.FromSeconds(2));return new("matched",new(1,1,0,0xff0000,new(10,10,9)));}
     }
 }

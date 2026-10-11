@@ -15,18 +15,17 @@
   }
   const w = v.videoWidth, h = v.videoHeight;
   const epoch = `${state.id}:${state.epoch}:${w}:${h}`;
-  let r = request.epoch === epoch && request.region ? request.region : {x:0,y:0,width:Math.floor(w/2),height:Math.floor(h/2)};
-  r = {x:Math.max(0,r.x), y:Math.max(0,r.y), width:Math.min(r.width,w-r.x),height:Math.min(r.height,h-r.y)};
+  const r = {x:0,y:0,width:Math.floor(w/3),height:Math.floor(h/2)};
   if (r.width <= 0 || r.height <= 0) return null;
-  const scale = Math.min(1, (request.epoch === epoch && request.region ? 256 : 480) / r.width);
-  const cw = Math.max(1,Math.round(r.width*scale)), ch = Math.max(1,Math.round(r.height*scale));
+  // Preserve native decoded pixels: disk/arrow localization runs on the guide source, never the small PiP.
+  const cw = r.width, ch = r.height;
   const c = state.canvas;
   if (c.width !== cw || c.height !== ch) { c.width=cw; c.height=ch; }
   // Reuse identical paused frames, but always recheck element, epoch, PiP and URL above.
   const key = `${epoch}:${v.currentTime}:${JSON.stringify(r)}`;
   if (!(v.paused && key === state.key)) {
     const ctx = c.getContext('2d', {alpha:false});
-    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingEnabled = false;
     ctx.drawImage(v,r.x,r.y,r.width,r.height,0,0,cw,ch);
     state.png = c.toDataURL('image/png').split(',')[1]; state.key = key;
   }

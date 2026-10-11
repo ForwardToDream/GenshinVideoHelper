@@ -7,7 +7,7 @@ using GenshinVideoHelper.Core.Diagnostics;
 
 namespace GenshinVideoHelper.Infrastructure.Browser;
 
-public sealed class VideoController : IVideoPlayer, IVideoActivitySource, IBilibiliAccountService, IDisposable
+public sealed class VideoController : IVideoPlayer, IVideoActivitySource, IVideoFrameInvalidationSource, IBilibiliAccountService, IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string Script = LoadScript();
@@ -16,12 +16,25 @@ public sealed class VideoController : IVideoPlayer, IVideoActivitySource, IBilib
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Uri, (long Connection, string Target)> _watched = new();
     public Core.Vision.IVideoFrameSource FrameSource => new VideoFrameSource(_client);
     public event Action<string>? MediaActivity;
+    public event Action<string>? VideoFrameInvalidated;
     public VideoController() => _client.EventReceived += OnEvent;
     private void OnEvent(Uri endpoint, string name, JsonElement data)
     {
         if (name == "Runtime.bindingCalled" && data.TryGetProperty("name", out var binding) &&
             binding.GetString() == "__gvhMediaReady" && _watched.TryGetValue(endpoint, out var watched))
+        {
+            if (data.TryGetProperty("payload", out var payload))
+            {
+                try
+                {
+                    using var notification = JsonDocument.Parse(payload.GetString() ?? "{}");
+                    if (notification.RootElement.TryGetProperty("invalidateVision", out var invalidated) &&
+                        invalidated.ValueKind == JsonValueKind.True) VideoFrameInvalidated?.Invoke(watched.Target);
+                }
+                catch (JsonException) { /* Older/in-flight observers may still send a plain URL. */ }
+            }
             MediaActivity?.Invoke(watched.Target);
+        }
     }
     private async Task MonitorAsync(BrowserPage page, CancellationToken token)
     {
@@ -45,18 +58,25 @@ public sealed class VideoController : IVideoPlayer, IVideoActivitySource, IBilib
         (() => {
           if (window.__gvhObserving) return;
           window.__gvhObserving = true;
-          let queued = false;
-          const notify = () => {
+          let queued = false, invalidateVision = false, watchedVideo = null;
+          const notify = (event) => {
+            if (document.pictureInPictureElement instanceof HTMLVideoElement)
+              watchedVideo = document.pictureInPictureElement;
+            if (event?.target instanceof HTMLVideoElement && event.target === watchedVideo &&
+                ['seeking', 'emptied', 'loadedmetadata', 'resize', 'leavepictureinpicture'].includes(event.type))
+              invalidateVision = true;
             if (queued) return;
             queued = true;
             setTimeout(() => {
               queued = false;
-              if (typeof window.__gvhMediaReady === 'function') window.__gvhMediaReady(location.href);
+              if (typeof window.__gvhMediaReady === 'function')
+                window.__gvhMediaReady(JSON.stringify({url:location.href, invalidateVision}));
+              invalidateVision = false;
             }, 40);
           };
           for (const name of ['DOMContentLoaded', 'loadedmetadata', 'loadeddata', 'canplay', 'playing',
                               'pause', 'ended', 'emptied', 'durationchange', 'enterpictureinpicture', 'leavepictureinpicture',
-                              'seeking', 'seeked', 'ratechange'])
+                              'seeking', 'seeked', 'ratechange', 'resize'])
             document.addEventListener(name, notify, true);
           notify();
         })()

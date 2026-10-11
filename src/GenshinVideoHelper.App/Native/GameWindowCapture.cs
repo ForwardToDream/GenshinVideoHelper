@@ -26,28 +26,38 @@ public sealed class GameWindowCapture : IGameFrameSource
     private long _epoch;
     private bool _closed;
     public bool IsForeground(nint window) => window != 0 && GetForegroundWindow()==window && IsWindow(window) && !IsIconic(window);
-    public ValueTask<VisionFrame?> CaptureAsync(nint window,CapturePlan plan,CancellationToken token)
+    public async ValueTask<VisionFrame?> CaptureAsync(nint window,CapturePlan plan,CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        if(!IsForeground(window))return ValueTask.FromResult<VisionFrame?>(null);
-        if(_closed || _window!=window || _pool is null) { Reset(); Start(window); return ValueTask.FromResult<VisionFrame?>(null); }
+        if(!IsForeground(window))return null;
+        if(_closed || _window!=window || _pool is null) { Reset(); Start(window); return null; }
         Direct3D11CaptureFrame? latest=null;
         try
         {
-            // Drain the two-buffer pool to consume the freshest frame; never queue full textures.
-            for(int i=0;i<3;i++){var next=_pool.TryGetNextFrame();if(next is null)break;latest?.Dispose();latest=next;}
-            if(latest is null)return ValueTask.FromResult<VisionFrame?>(null);
+            // A long pause can leave old frames in the pool. Release them before waiting briefly for a fresh one.
+            var waitStarted=Stopwatch.GetTimestamp();
+            do
+            {
+                token.ThrowIfCancellationRequested();
+                for(int i=0;i<3;i++){var next=_pool.TryGetNextFrame();if(next is null)break;latest?.Dispose();latest=next;}
+                if(latest is not null && FrameAgeMs(latest)<=100)break;
+                latest?.Dispose();latest=null;
+                if(!IsForeground(window)||Stopwatch.GetElapsedTime(waitStarted).TotalMilliseconds>=60)break;
+                await Task.Delay(5,token).ConfigureAwait(false);
+            } while(true);
+            if(latest is null)return null;
             var size=latest.ContentSize;
             if(size.Width!=_item!.Size.Width || size.Height!=_item.Size.Height || size.Width<=0 || size.Height<=0)
-            { Reset();return ValueTask.FromResult<VisionFrame?>(null); }
-            if(!GetClientRect(window,out var client))return ValueTask.FromResult<VisionFrame?>(null);
+            { Reset();return null; }
+            if(!GetClientRect(window,out var client))return null;
             var origin=new NativePoint();ClientToScreen(window,ref origin);
             if(DwmGetWindowAttribute(window,9,out var bounds,Marshal.SizeOf<NativeRect>())!=0) GetWindowRect(window,out bounds);
             int ox=origin.X-bounds.Left,oy=origin.Y-bounds.Top,w=client.Right,h=client.Bottom;
-            if(ox<0||oy<0||w<=0||h<=0||ox+w>size.Width||oy+h>size.Height)return ValueTask.FromResult<VisionFrame?>(null);
+            if(ox<0||oy<0||w<=0||h<=0||ox+w>size.Width||oy+h>size.Height)return null;
             string epoch=$"{_epoch}:{size.Width}:{size.Height}:{ox}:{oy}:{w}:{h}";
-            var r=plan.Epoch==epoch && plan.Region is {} cached ? cached : new FrameRegion(0,0,w/2,h/2);
-            if(r.X<0||r.Y<0||r.Width<1||r.Height<1||r.X+r.Width>w||r.Y+r.Height>h)return ValueTask.FromResult<VisionFrame?>(null);
+            // User HUD is fixed; compute its crop from the actual client size even on the first frame.
+            var r=MinimapGeometry.GameCaptureRegion(w,h);
+            if(r.X<0||r.Y<0||r.Width<1||r.Height<1||r.X+r.Width>w||r.Y+r.Height>h)return null;
             EnsureStaging(r.Width,r.Height);
             var access=latest.Surface.As<IDirect3DDxgiInterfaceAccess>();
             var textureId=typeof(ID3D11Texture2D).GUID;
@@ -62,13 +72,15 @@ public sealed class GameWindowCapture : IGameFrameSource
             try
             {
                 for(int row=0;row<r.Height;row++)Marshal.Copy(mapped.DataPointer+(nint)(row*mapped.RowPitch),frame.Pixels,row*frame.Stride,frame.Stride);
-                return ValueTask.FromResult<VisionFrame?>(frame);
+                return frame;
             }
             catch {frame.Dispose();throw;}
             finally {_context.Unmap(_staging!,0);}
         }
         finally {latest?.Dispose();}
     }
+    private static double FrameAgeMs(Direct3D11CaptureFrame frame) => frame.SystemRelativeTime is {} time
+        ? Stopwatch.GetElapsedTime((long)(time.TotalSeconds*Stopwatch.Frequency)).TotalMilliseconds : 0;
     private void Start(nint window)
     {
         if(!GraphicsCaptureSession.IsSupported())throw new NotSupportedException("当前系统不支持 Windows Graphics Capture");

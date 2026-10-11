@@ -6,7 +6,7 @@ using GenshinVideoHelper.Core.Vision;
 namespace GenshinVideoHelper.Core.Application;
 
 public sealed record VisionIntent(BrowserPage Page, VideoIdentity Identity, long FollowVersion, nint GameWindow,
-    int IntervalMs, int SearchIntervalMs, bool Direction);
+    int IntervalMs, bool Direction);
 
 /// <summary>One worker, one pair in flight, no frame queue. Source adapters are exclusively owned.</summary>
 public sealed class MinimapFollowCoordinator : IDisposable
@@ -47,6 +47,7 @@ public sealed class MinimapFollowCoordinator : IDisposable
     private async Task RunAsync()
     {
         long previous = -1;
+        string? videoEpoch = null, gameEpoch = null;
         try
         {
             while (!_stop.IsCancellationRequested)
@@ -57,7 +58,8 @@ public sealed class MinimapFollowCoordinator : IDisposable
                 int interval = intent?.IntervalMs ?? 300;
                 try
                 {
-                    if (previous != generation) { _analyzer.Reset(); previous = generation; }
+                    if (previous != generation)
+                    { _analyzer.Reset(); previous = generation; videoEpoch = gameEpoch = null; }
                     if (intent is null || !_game.IsForeground(intent.GameWindow))
                     {
                         _game.Reset();
@@ -68,30 +70,34 @@ public sealed class MinimapFollowCoordinator : IDisposable
                     {
                         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
                         deadline.CancelAfter(800);
-                        // These sources run independently, outside the player's operation lock.
+                        // Read the inexpensive GPU ROI after CDP completes, so rendering uses the freshest game frame.
+                        // Neither source acquires the player's operation lock.
                         var videoTask = _video.CaptureAsync(intent.Page, intent.Identity, _analyzer.VideoPlan, deadline.Token);
                         VisionFrame? game = null; VisionFrame? video = null;
                         try
                         {
-                            game = await _game.CaptureAsync(intent.GameWindow, _analyzer.GamePlan, deadline.Token);
                             video = await videoTask;
+                            game = await _game.CaptureAsync(intent.GameWindow, _analyzer.GamePlan, deadline.Token);
                             var captureMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                             if (generation != Generation) continue;
                             if (video is null || game is null)
-                                Publish(new(generation, video is null ? "等待有效视频画面与画中画" : "等待游戏捕获画面"));
+                                Publish(new(generation, video is null ? "等待有效视频画面与画中画" : "等待游戏捕获画面",
+                                    RetainMarker: video is not null && video.Epoch == videoEpoch));
                             else if (Stopwatch.GetElapsedTime(game.CapturedAt).TotalMilliseconds > 250 ||
                                      Stopwatch.GetElapsedTime(video.CapturedAt).TotalMilliseconds > 250)
                                 Publish(new(generation, "画面已过期，等待新帧"));
                             else
                             {
+                                var sameSources = video.Epoch == videoEpoch && game.Epoch == gameEpoch;
+                                videoEpoch = video.Epoch; gameEpoch = game.Epoch;
                                 var analysisStart = Stopwatch.GetTimestamp();
-                                var result = _analyzer.Analyze(video, game, intent.Direction, intent.SearchIntervalMs);
+                                var result = _analyzer.Analyze(video, game, intent.Direction);
                                 var elapsed = Stopwatch.GetElapsedTime(analysisStart).TotalMilliseconds;
-                                if (result.Marker is null) interval = Math.Max(interval, intent.SearchIntervalMs);
+                                // Detection and matching both run at the chosen sampling rate.
                                 if (!_game.IsForeground(intent.GameWindow) || Stopwatch.GetElapsedTime(game.CapturedAt).TotalMilliseconds > 250)
                                     Publish(new(generation, "等待新鲜的游戏画面"));
                                 else Publish(new(generation, result.Status, result.Marker, intent.GameWindow, game.CapturedAt,
-                                    captureMs, elapsed, result.Correlation, result.Inliers));
+                                    captureMs, elapsed, result.Correlation, result.Inliers, result.RetainMarker && sameSources));
                             }
                         }
                         finally

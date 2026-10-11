@@ -28,9 +28,9 @@ public sealed class VideoFrameSource(CdpClient client) : IVideoFrameSource
         if (reply.TryGetProperty("exceptionDetails", out _)) throw new InvalidOperationException("视频帧暂不可读取");
         if (!reply.GetProperty("result").TryGetProperty("value", out var value) || value.ValueKind == JsonValueKind.Null) return null;
         var data = value.Deserialize<CaptureReply>(Json)!;
-        if (data.Png.Length > 2_000_000) throw new InvalidOperationException("视频区域响应过大");
+        if (data.Png.Length > 16_000_000) throw new InvalidOperationException("视频区域响应过大");
         using var image = Cv2.ImDecode(Convert.FromBase64String(data.Png), ImreadModes.Color);
-        if (image.Empty()) return null;
+        if (image.Empty() || image.Width != data.Region.Width || image.Height != data.Region.Height) return null;
         var frame = new VisionFrame(image.Width, image.Height, 3, data.Width, data.Height, data.Region, data.Epoch,
             start, data.Paused, data.Time);
         try { Marshal.Copy(image.Data, frame.Pixels, 0, checked(image.Width * image.Height * 3)); return frame; }

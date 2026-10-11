@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using GenshinVideoHelper.App.Native;
 using GenshinVideoHelper.Core.Models;
+using GenshinVideoHelper.Core.Contracts;
 using GenshinVideoHelper.Core.Application;
 using GenshinVideoHelper.App.Composition;
 using GenshinVideoHelper.Core.Settings;
@@ -74,6 +75,7 @@ public partial class MainWindow : Window
         _poll.Tick += async (_, _) => { Services.Progress.SaveIfDue(); await PollAsync(); };
         Services.Follow.Changed += DisplayFollow;
         if (Services.VideoActivity is { } activity) activity.MediaActivity += OnMediaActivity;
+        if (Services.VideoActivity is IVideoFrameInvalidationSource source) source.VideoFrameInvalidated += OnVideoFrameInvalidated;
         Loaded += async (_, _) => { if (!_closing) await Services.WarmupAsync(); };
         Services.Preview.Changed += DisplayPreview;
         InitializeProgress();
@@ -136,9 +138,13 @@ public partial class MainWindow : Window
         _tray = new TrayIconService(this, RestoreFromTray, Close);
     }
 
-    private void OnMediaActivity(string target)
+    private void OnVideoFrameInvalidated(string target)
     {
         if (Services.Follow.Current.Page?.Id == target) Services.Vision?.Invalidate();
+    }
+
+    private void OnMediaActivity(string target)
+    {
         if (_closing || Interlocked.Exchange(ref _mediaQueued, 1) != 0) return;
         Dispatcher.BeginInvoke(async () =>
         {
@@ -433,6 +439,7 @@ public partial class MainWindow : Window
         _tray?.Dispose();
 
         if (Services.VideoActivity is { } activity) activity.MediaActivity -= OnMediaActivity;
+        if (Services.VideoActivity is IVideoFrameInvalidationSource source) source.VideoFrameInvalidated -= OnVideoFrameInvalidated;
         DisposeProgress();
         _mapOverlay?.Dispose();
         Services.Dispose();
