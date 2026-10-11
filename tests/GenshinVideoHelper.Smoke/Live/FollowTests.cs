@@ -110,9 +110,8 @@ internal static class FollowTests
             await WaitForAsync(() => window.Services.Follow.Current.Video is { PictureInPicture: false }, "Browser PiP close is observed", window);
             var mouseVisibility = window.Services.Pip.MouseVisibility;
             Check(mouseVisibility.BrowserProcessId == 0 && mouseVisibility.WindowHandle == 0, "Manual close stops video and companion-bar tracking");
-            keybd_event(0xC0, 0, 0, 0);
-            try { await Task.Delay(400); }
-            finally { keybd_event(0xC0, 0, 2, 0); }
+            SendAltNumber(0x34);
+            await Task.Delay(400);
             await Task.Delay(3500);
             Check(window.Services.Follow.Current.Video is { PictureInPicture: false } &&
                    !window.Services.Follow.Session.AutomaticPending, "Manual browser PiP close remains closed");
@@ -240,25 +239,23 @@ internal static class FollowTests
             SetCursorPos((bounds.Left + bounds.Right) / 2, (bounds.Top + bounds.Bottom) / 2);
             await WaitForAsync(() => visibility.IsTemporarilyHidden && HasTransparentAppearance(pip), "Automatic timer hides on entering real PiP", window);
             Check(window.Services.Follow.Current.Video is { PictureInPicture: true, Paused: false }, "Temporary hiding retains active playing PiP session");
-            keybd_event(0xC0, 0, 0, 0);
-            keybd_event(0xC0, 0, 2, 0);
+            SendAltNumber(0x34);
             await WaitForAsync(() => visibility.Mode == PipVisibilityMode.AlwaysVisible && !visibility.IsTemporarilyHidden &&
-                IsWindowVisible(visibility.FrameWindowHandle), "Tilde click locks PiP visible after key release", window);
-            keybd_event(0xC0, 0, 0, 0);
-            keybd_event(0xC0, 0, 2, 0);
+                IsWindowVisible(visibility.FrameWindowHandle), "Alt+4 locks PiP visible after key release", window);
+            SendAltNumber(0x34);
             await WaitForAsync(() => visibility.Mode == PipVisibilityMode.AlwaysHidden && visibility.IsTemporarilyHidden &&
                 !IsWindowVisible(visibility.FrameWindowHandle), "Second click hides video and bar together", window);
-            keybd_event(0xC0, 0, 0, 0);
-            keybd_event(0xC0, 0, 2, 0);
+            SendAltNumber(0x34);
             await WaitForAsync(() => visibility.Mode == PipVisibilityMode.Automatic && visibility.IsTemporarilyHidden &&
                 !IsWindowVisible(visibility.FrameWindowHandle), "Third click returns to automatic avoidance", window);            window.WindowState = WindowState.Minimized;
             SetCursorPos(bounds.Right + (bounds.Right - bounds.Left), bounds.Top);
             await WaitForAsync(() => !visibility.IsTemporarilyHidden && IsWindowVisible(pip) && !HasTransparentAppearance(pip), "Mouse avoidance remains active while helper is minimized", window);
-            Console.WriteLine("Actual Bilibili PiP: three-state tilde cycling, companion bar and minimized-helper operation passed.");
+            Console.WriteLine("Actual Bilibili PiP: three-state Alt+4 cycling, companion bar and minimized-helper operation passed.");
         }
         finally
         {
-            keybd_event(0xC0, 0, 2, 0);
+            keybd_event(0x34, 0, 2, 0);
+            keybd_event(0x12, 0, 2, 0);
             Invoke(window, "RestoreFromTray");
             window.WindowState = originalWindowState;
             SetCursorPos(originalCursor.X, originalCursor.Y);

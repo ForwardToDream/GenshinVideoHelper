@@ -50,7 +50,7 @@ public static class HotkeyBindings
         [HotkeyAction.SeekBackward] = "Alt+1", [HotkeyAction.TogglePlayback] = "Alt+2", [HotkeyAction.SeekForward] = "Alt+3",
         [HotkeyAction.PreviousEpisode] = "Alt+Left", [HotkeyAction.NextEpisode] = "Alt+Right",
         [HotkeyAction.TogglePip] = "Alt+P", [HotkeyAction.PlacePip] = "Alt+Home", [HotkeyAction.ToggleMute] = "Alt+End",
-        [HotkeyAction.ReversePipVisibility] = "~"
+        [HotkeyAction.ReversePipVisibility] = "Alt+4"
     };
 
     public static string Title(HotkeyAction action) => action switch

@@ -57,14 +57,14 @@ internal static class PipTests
                 blocker.Close();
                 hotkeys.Disable();
             }
-            var reservedMode = RegisterHotKey(handle, 0x99AB, 0x4000, 0xC0);
+            var reservedMode = RegisterHotKey(handle, 0x99AB, 0x4001, 0x34);
             try
             {
-                Check(reservedMode, "Reserve the single mode key for the conflict test");
+                Check(reservedMode, "Reserve the default mode chord for the conflict test");
                 var blocked = hotkeys.Enable();
-                Check(blocked.Any(label => label.Contains("显隐模式") && label.Contains("~")) &&
+                Check(blocked.Any(label => label.Contains("显隐模式") && label.Contains("Alt+4")) &&
                     !hotkeys.IsRegistered(HotkeyAction.ReversePipVisibility) && hotkeys.RegisteredCount == 8,
-                    "A conflicting tilde reports exactly eight available actions");
+                    "A conflicting Alt+4 reports exactly eight available actions");
             }
             finally
             {
@@ -147,7 +147,7 @@ internal static class PipTests
         using var visibility = new PipMouseVisibilityService(pollAutomatically: false);
         void OnHotkey(HotkeyAction action) { if (action == HotkeyAction.ReversePipVisibility) visibility.CycleMode(); }
         hotkeys.Pressed += OnHotkey;
-        Check(hotkeys.IsRegistered(HotkeyAction.ReversePipVisibility), "Unmodified tilde is registered as a system hotkey");
+        Check(hotkeys.IsRegistered(HotkeyAction.ReversePipVisibility), "Alt+4 is registered as the default mode hotkey");
         bool FrameVisible() => visibility.FrameWindowHandle != 0 && IsWindowVisible(visibility.FrameWindowHandle);
         void CheckFrame(string symbol)
         {
@@ -194,27 +194,27 @@ internal static class PipTests
             await controller.ExecuteAsync(session.Page, new("ensurePlay"));
 
             Check(!FrameVisible(), "Automatic mode hides video and bar together");
-            keybd_event(0xC0, 0, 0, 0);
-            await ExpectVisibility(true, "Press tilde locks video visible inside the mouse region");
+            keybd_event(0x12, 0, 0, 0);
+            keybd_event(0x34, 0, 0, 0);
+            await ExpectVisibility(true, "Press Alt+4 locks video visible inside the mouse region");
             Check(visibility.Mode == PipVisibilityMode.AlwaysVisible, "Automatic -> locked");
             CheckFrame("LockIcon");
-            for (var repeat = 0; repeat < 4; repeat++) keybd_event(0xC0, 0, 0, 0);
+            for (var repeat = 0; repeat < 4; repeat++) keybd_event(0x34, 0, 0, 0);
             await Task.Delay(150);
             Check(visibility.Mode == PipVisibilityMode.AlwaysVisible, "Holding/repeating the key cannot cycle again");
-            keybd_event(0xC0, 0, 2, 0);
+            keybd_event(0x34, 0, 2, 0);
+            keybd_event(0x12, 0, 2, 0);
             await Task.Delay(80);
             await ExpectVisibility(true, "Key release preserves locked mode");
 
-            keybd_event(0xC0, 0, 0, 0);
-            keybd_event(0xC0, 0, 2, 0);
+            SendAltNumber(0x34);
             await ExpectVisibility(false, "Second press forces hidden video");
             Check(visibility.Mode == PipVisibilityMode.AlwaysHidden, "Locked -> hidden");
             Check(!FrameVisible(), "Forced hide hides video and bar together");
             SetCursorPos(bounds.Right + width, centerY);
             await ExpectVisibility(false, "Forced hide ignores pointer leaving the region");
             Check(!FrameVisible(), "Forced hide keeps the bar hidden after the pointer leaves");
-            keybd_event(0xC0, 0, 0, 0);
-            keybd_event(0xC0, 0, 2, 0);
+            SendAltNumber(0x34);
             await ExpectVisibility(true, "Third press returns to mouse avoidance");
             Check(visibility.Mode == PipVisibilityMode.Automatic, "Hidden -> automatic");
             CheckFrame("MouseIcon");
@@ -236,8 +236,7 @@ internal static class PipTests
             keybd_event(0x11, 0, 2, 0);
             await ExpectVisibility(true, "Custom chord cycles once and persists after release");
             hotkeys.Disable();
-            keybd_event(0xC0, 0, 0, 0);
-            keybd_event(0xC0, 0, 2, 0);
+            SendAltNumber(0x34);
             await Task.Delay(80);
             Check(visibility.Mode == PipVisibilityMode.AlwaysVisible, "Disabling hotkeys prevents mode changes");
             Check(hotkeys.Enable().Count == 0, "Restore default bindings");
@@ -272,9 +271,9 @@ internal static class PipTests
             }
             Check(!(await controller.ExecuteAsync(session.Page, new("status"))).PictureInPicture, "Chrome observes native window close");
             SetCursorPos(bounds.Right + width, bounds.Top);
-            for (var i = 0; i < 6; i++)
+            for (var i = 0; i < 3; i++)
             {
-                keybd_event(0xC0, 0, i % 2 == 0 ? 0u : 2u, 0);
+                SendAltNumber(0x34);
                 visibility.Refresh();
                 await Task.Delay(40);
             }
@@ -296,7 +295,7 @@ internal static class PipTests
         }
         finally
         {
-            keybd_event(0xC0, 0, 2, 0);
+            keybd_event(0x34, 0, 2, 0);
             keybd_event(0x12, 0, 2, 0);
             keybd_event(0x11, 0, 2, 0);
             keybd_event(0x77, 0, 2, 0);

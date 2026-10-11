@@ -160,7 +160,7 @@ internal static class UiTests
         Invoke(window, "ResetBindings_Click", window, new RoutedEventArgs());
         Check(settings.Hotkeys[HotkeyAction.NextEpisode] == "Ctrl+Shift+F8", "Filling defaults does not apply until saved");
         Invoke(window, "SaveBindings_Click", window, new RoutedEventArgs());
-        Check(settings.Hotkeys[HotkeyAction.NextEpisode] == "Alt+Right" && settings.Hotkeys[HotkeyAction.ReversePipVisibility] == "~", "Default reset is applied on save including mode key");
+        Check(settings.Hotkeys[HotkeyAction.NextEpisode] == "Alt+Right" && settings.Hotkeys[HotkeyAction.ReversePipVisibility] == "Alt+4", "Default reset is applied on save including mode key");
         ((TextBlock)window.FindName("BindingStatus")).Text = "下一分集：Alt+2 与另一项绑定重复。请修改后再保存。";
     }
 
