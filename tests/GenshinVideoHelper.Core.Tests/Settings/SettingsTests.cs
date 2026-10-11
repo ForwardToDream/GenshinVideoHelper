@@ -18,6 +18,18 @@ public sealed class SettingsTests
     }
 
     [Theory]
+    [InlineData(0, 0, 0, 400)]
+    [InlineData(0, 0, 640, -1)]
+    [InlineData(0, 0, 40000, 400)]
+    [InlineData(int.MaxValue, 0, 640, 400)]
+    public void Normalize_InvalidPipPlacement_UsesFactoryLayout(int left, int top, int width, int height)
+    {
+        var settings = new AppSettings { PipPlacement = new(left, top, width, height) };
+        settings.Normalize();
+        Assert.Null(settings.PipPlacement);
+    }
+
+    [Theory]
     [InlineData("Alt", false)] [InlineData("1", false)] [InlineData("Alt+Alt+1", false)]
     [InlineData("Ctrl+Potato", false)] [InlineData("Alt+F25", false)] [InlineData(" alt + left ", true)]
     public void Gesture_ValidatesCombination(string input, bool expected) => Assert.Equal(expected, HotkeyGesture.TryParse(input, out _));

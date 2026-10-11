@@ -195,11 +195,11 @@ public sealed class FollowCoordinator : IDisposable
                     if (!Session.AutomaticPending || !IsCurrent(request)) return;
                     state = await ReadVideoAsync(new("ensurePip"), request);
                     if (!Session.AutomaticPending || !IsCurrent(request)) return;
-                    await PlaceAsync(state, request);
+                    await PlaceAsync(state, request, restore: true);
                     EnsureCurrent(request);
                     Session.Complete(request);
                     var resumed = _resumedTo is { } position ? $"已从 {TimeText.Format(position)} 继续。" : "";
-                    Publish(Current with { Phase = FollowPhase.Following, CanRetry = false, Message = resumed + "已开始跟随，画中画置顶在左下角。可以最小化工具进入游戏。", IsError = false });
+                    Publish(Current with { Phase = FollowPhase.Following, CanRetry = false, Message = resumed + "已开始跟随，画中画已置顶。可以最小化工具进入游戏。", IsError = false });
                 }
                 catch (VideoNotReadyException) { throw; }
                 catch (OperationCanceledException) when (!IsCurrent(request)) { }
@@ -255,7 +255,7 @@ public sealed class FollowCoordinator : IDisposable
             {
                 EnsureCurrent(request);
                 var state = await ReadVideoAsync(command, request);
-                if (command.Action == "pip" && state.PictureInPicture) await PlaceAsync(state, request);
+                if (command.Action == "pip" && state.PictureInPicture) await PlaceAsync(state, request, restore: true);
                 EnsureCurrent(request);
                 Message(command.Action switch
                 {
@@ -263,7 +263,7 @@ public sealed class FollowCoordinator : IDisposable
                     "seek" => $"已跳转到 {FormatTime(state.CurrentTime)}。",
                     "mute" => state.Muted ? "视频已静音。" : "已恢复视频声音。",
                     "rate" => $"播放速度 {state.PlaybackRate:0.##}×。",
-                    "pip" => state.PictureInPicture ? "画中画已置顶在左下角。" : "画中画已关闭；当前分集不会自动重新开启。",
+                    "pip" => state.PictureInPicture ? "画中画已置顶。" : "画中画已关闭；当前分集不会自动重新开启。",
                     _ => "视频状态已更新。"
                 });
             }
@@ -286,11 +286,12 @@ public sealed class FollowCoordinator : IDisposable
         }, () => request);
     }
 
-    private async Task PlaceAsync(VideoState state, FollowRequest request)
+    private async Task PlaceAsync(VideoState state, FollowRequest request, bool restore = false)
     {
         var pid = await _browser.GetBrowserProcessIdAsync(request.Token);
         EnsureCurrent(request);
-        await _pip.PlaceAsync(pid, state, request.Token);
+        if (restore) await _pip.RestoreAsync(pid, state, request.Token);
+        else await _pip.PlaceAsync(pid, state, request.Token);
     }
 
     private async Task GuardAsync(Func<Task> action, Func<FollowRequest?> owner, bool quiet = false)

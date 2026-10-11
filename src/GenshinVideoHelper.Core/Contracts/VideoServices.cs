@@ -26,6 +26,7 @@ public interface IEpisodeProvider
 public interface IPipController
 {
     Task ObserveAsync(int browserProcessId, bool enabled, CancellationToken token);
+    Task RestoreAsync(int browserProcessId, VideoState state, CancellationToken token);
     Task PlaceAsync(int browserProcessId, VideoState state, CancellationToken token);
 }
 

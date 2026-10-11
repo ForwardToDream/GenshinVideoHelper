@@ -66,7 +66,7 @@ public sealed class AppServices : IDisposable
         if (episodes is not null && episodeFactory is not null) throw new ArgumentException("Specify an episode service or a factory, not both.");
         if (episodes is null) { episodes = episodeFactory?.Invoke() ?? new BilibiliEpisodeService(); _ownedEpisodes = episodes as IDisposable; }
         _episodes = episodes;
-        Pip = new(settings);
+        Pip = new(settings, store);
         Preview = new(episodes, _cache);
         // A previewed video is known before it is ever followed, so its parts can be shown and pre-marked.
         Preview.Changed += preview => { if (preview.Info is { } info) Progress.Describe(info); };

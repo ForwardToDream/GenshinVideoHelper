@@ -17,6 +17,7 @@ public sealed class JsonSettingsStoreTests : IDisposable
         Assert.True(File.Exists(PathFor()));
         Assert.Equal("", loaded.Settings.VideoUrl);
         Assert.Equal(9, loaded.Settings.Hotkeys.Count);
+        Assert.Null(loaded.Settings.PipPlacement);
         Assert.DoesNotContain("DefaultVideoUrl", File.ReadAllText(PathFor()));
     }
 
@@ -29,6 +30,7 @@ public sealed class JsonSettingsStoreTests : IDisposable
         settings.SelectedVideoLibraryId = null;
         settings.SeekSeconds = 10;
         settings.PipWidth = 480;
+        settings.PipPlacement = new(-900, 80, 640, 420);
         settings.HotkeysEnabled = false;
         settings.Hotkeys[HotkeyAction.NextEpisode] = "Ctrl+Shift+F8";
         settings.Hotkeys[HotkeyAction.ReversePipVisibility] = "F8";
@@ -38,6 +40,8 @@ public sealed class JsonSettingsStoreTests : IDisposable
         Assert.Null(actual.SelectedVideoLibraryId);
         Assert.Equal(10, actual.SeekSeconds);
         Assert.Equal(480, actual.PipWidth);
+        Assert.Equal(settings.PipPlacement, actual.PipPlacement);
+        Assert.DoesNotContain("IsValid", File.ReadAllText(PathFor()));
         Assert.False(actual.HotkeysEnabled);
         Assert.Equal("F8", actual.Hotkeys[HotkeyAction.ReversePipVisibility]);
         Assert.Contains("Ctrl+Shift+F8", File.ReadAllText(PathFor()));

@@ -55,6 +55,26 @@ public sealed class FollowCoordinatorTests
         Assert.False(follow.Current.AutomaticPending);
         Assert.Single(video.Commands, command => command == "ensurePlay");
         Assert.Single(video.Commands, command => command == "ensurePip");
+        Assert.Equal(1, pip.Restores);
+        Assert.Equal(0, pip.Placements);
+    }
+
+    [Fact]
+    public async Task AutomaticOpenAndEpisodeSwitch_RestoreLayout_ExplicitResetPlacesAtDefault()
+    {
+        var video = new FakeVideo { Reply = (page, _, _) => Task.FromResult(
+            new VideoState("fixture", page.Url, false, 0, 60, false, 1, true, 640, 360)) };
+        var pip = new FakePip();
+        using var follow = new FollowCoordinator(new FakeBrowser(), video, new FakeEpisodes(), pip, new());
+        await follow.OpenAsync(new("BV1hjgG6jEa6", 1));
+        await follow.PollAsync();
+        await follow.NavigateAsync(2);
+        await follow.PollAsync();
+        await follow.ExecuteAsync(new("pip"));
+        Assert.Equal(3, pip.Restores);
+        Assert.Equal(0, pip.Placements);
+        await follow.PlacePipAsync();
+        Assert.Equal(3, pip.Restores);
         Assert.Equal(1, pip.Placements);
     }
 

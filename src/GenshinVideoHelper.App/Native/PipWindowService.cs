@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
 using GenshinVideoHelper.Core.Diagnostics;
+using GenshinVideoHelper.Core.Settings;
 
 namespace GenshinVideoHelper.App.Native;
 
@@ -13,18 +14,9 @@ public static class PipWindowService
     private static PipFrameWindow? FrameFor(nint pip) { lock (Frames) return Frames.GetValueOrDefault(pip); }
 
     public static async Task PlaceAsync(int browserProcessId, nint helperWindow, int widthDip,
-        int marginDip, double aspectRatio, CancellationToken token = default)
+        int marginDip, double aspectRatio, CancellationToken token = default, PipPlacement? placement = null)
     {
-        nint pip = 0;
-        for (var attempt = 0; attempt < 20; attempt++)
-        {
-            pip = FindPip(browserProcessId);
-            if (pip != 0) break;
-            await Task.Delay(100, token);
-        }
-        if (pip == 0) AppLog.Warn("Pip", $"2 秒内未找到 PID {browserProcessId} 的画中画窗口。");
-        if (pip == 0)
-            throw new InvalidOperationException("画中画已开启，但未找到浮窗。可手动拖到左下角，或点击“放回左下角”重试。");
+        var pip = await WaitForPipAsync(browserProcessId, token);
 
         var monitor = MonitorFromWindow(helperWindow, 2); // tool's monitor, nearest fallback
         var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
@@ -37,7 +29,8 @@ public static class PipWindowService
         var height = Math.Min((int)Math.Round(width / ratio), (work.Bottom - work.Top) / 2);
         if (FrameFor(pip) is { } frame)
         {
-            frame.Place(work.Left + margin, work.Bottom - margin, width, height);
+            if (placement is { IsValid: true }) frame.RestorePlacement(placement);
+            else frame.Place(work.Left + margin, work.Bottom - margin, width, height);
             return;
         }
         if (!SetWindowPos(pip, new nint(-1), work.Left + margin, work.Bottom - margin - height,
@@ -48,6 +41,23 @@ public static class PipWindowService
             throw new Win32Exception(error);
         }
         AppLog.Info("Pip", $"浮窗 0x{pip:X} 已放置：{work.Left + margin},{work.Bottom - margin - height} {width}×{height}，缩放 {scale:0.##}。");
+    }
+
+    internal static async Task<nint> WaitForPipAsync(int browserProcessId, CancellationToken token)
+    {
+        nint pip = 0;
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            token.ThrowIfCancellationRequested();
+            pip = FindPip(browserProcessId);
+            if (pip != 0) break;
+            await Task.Delay(100, token);
+        }
+        if (pip == 0) AppLog.Warn("Pip", $"2 秒内未找到 PID {browserProcessId} 的画中画窗口。");
+        if (pip == 0)
+            throw new InvalidOperationException("画中画已开启，但未找到浮窗。可手动拖到左下角，或点击“放回左下角”重试。");
+
+        return pip;
     }
 
     public static nint FindPip(int browserProcessId, bool includeHidden = false)

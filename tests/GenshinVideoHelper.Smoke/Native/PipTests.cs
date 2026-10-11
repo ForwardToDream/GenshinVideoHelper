@@ -126,6 +126,7 @@ internal static class PipTests
                 Check(Math.Abs(bounds.Left - info.Work.Left - margin) <= 3, "PiP left margin");
                 Check(Math.Abs(bounds.Bottom - info.Work.Bottom + margin) <= 3, "PiP bottom margin");
                 await TestMouseVisibilityAsync(session, pid, handle, controller, hotkeys, root);
+                await TestPlacementPersistenceAsync(session, pid, handle, controller, root);
                 state = await controller.ExecuteAsync(session.Page, new("ensurePipClosed"));
                 Check(!state.PictureInPicture, "Exit PiP");
                 Console.WriteLine("Native PiP entry, topmost, bottom-left positioning and exit passed.");
@@ -369,6 +370,17 @@ internal static class PipTests
         GetWindowRect(visibility.FrameWindowHandle, out var before);
         int x = before.Left + (before.Right - before.Left) / 2;
         int y = videoArea ? (before.Top + before.Bottom) / 2 : before.Top + (int)(12 * GetDpiForWindow(visibility.FrameWindowHandle) / 96d);
+        await DragPointerAsync(x, y, 65, -35);
+        GetWindowRect(visibility.FrameWindowHandle, out var after);
+        Check(Math.Abs(after.Left - before.Left - 65) <= 2 && Math.Abs(after.Top - before.Top + 35) <= 2,
+            "Dragging " + (videoArea ? "video" : "header") + " moves the whole frame");
+        Check(GetWindowRect(visibility.WindowHandle, out var source) && source.Right < 0 && source.Bottom < 0,
+            "Dragging moves one window while Chrome's source remains off-screen");
+        Check(GetForegroundWindow() == foreground, "Dragging the frame keeps foreground game/app focus");
+    }
+
+    private static async Task DragPointerAsync(int x, int y, int dx, int dy)
+    {
         await Task.Run(() =>
         {
             SetCursorPos(x, y);
@@ -376,18 +388,83 @@ internal static class PipTests
             {
                 mouse_event(2, 0, 0, 0, 0);
                 Thread.Sleep(100);
-                SetCursorPos(x + 65, y - 35);
+                SetCursorPos(x + dx, y + dy);
                 Thread.Sleep(100);
             }
             finally { mouse_event(4, 0, 0, 0, 0); }
         });
         await Task.Delay(80);
-        GetWindowRect(visibility.FrameWindowHandle, out var after);
-        Check(Math.Abs(after.Left - before.Left - 65) <= 2 && Math.Abs(after.Top - before.Top + 35) <= 2,
-            "Dragging " + (videoArea ? "video" : "header") + " moves the whole frame");
-        Check(GetWindowRect(visibility.WindowHandle, out var source) && source.Right < 0 && source.Bottom < 0,
-            "Dragging moves one window while Chrome's source remains off-screen");
-        Check(GetForegroundWindow() == foreground, "Dragging the frame keeps foreground game/app focus");
+    }
+
+    private static async Task TestPlacementPersistenceAsync(ChromeFixture session, int pid, nint helper, VideoController video, string root)
+    {
+        Check(GetCursorPos(out var originalCursor), "Read cursor before layout tests");
+        using var directory = TestArtifacts.CreateTemp(root, "pip-layout");
+        var store = new JsonSettingsStore(Path.Combine(directory.Path, "config.json"));
+        var settings = store.Load().Settings;
+        var monitor = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        GetMonitorInfo(MonitorFromWindow(helper, 2), ref monitor);
+        PipPlacement saved;
+        try
+        {
+            using (var first = new WindowsPipController(settings, store) { HelperWindow = helper })
+            {
+                var state = await video.ExecuteAsync(session.Page, new("ensurePip"));
+                await first.RestoreAsync(pid, state, CancellationToken.None);
+                var visibility = first.MouseVisibility;
+                var initial = visibility.Placement!;
+                var margin = (int)Math.Round(settings.PipMargin * GetDpiForWindow(helper) / 96d);
+                Check(initial.Left == monitor.Work.Left + margin && initial.Top + initial.Height == monitor.Work.Bottom - margin,
+                    "Factory layout uses the current bottom-left defaults");
+                Check(store.Load().Settings.PipPlacement is null, "Automatic factory placement does not replace a user's layout");
+                visibility.CycleMode(); // lock visible while interacting
+                var foreground = GetForegroundWindow();
+                await TestEmbeddedDragAsync(visibility, foreground, false);
+                Check(store.Load().Settings.PipPlacement == visibility.Placement, "A completed drag saves its new position immediately");
+                var beforeResize = visibility.Placement!;
+                await DragPointerAsync(beforeResize.Left + beforeResize.Width - 3, beforeResize.Top + beforeResize.Height - 3, 60, 40);
+                saved = visibility.Placement!;
+                Check(saved.Width == beforeResize.Width + 60 && saved.Height == beforeResize.Height + 40,
+                    "A real edge gesture resizes the complete frame");
+                Check(saved == store.Load().Settings.PipPlacement, "A completed resize saves position and both dimensions");
+                var contents = File.ReadAllText(Path.Combine(directory.Path, "config.json"));
+                visibility.CycleMode();
+                await Task.Delay(200);
+                Check(contents == File.ReadAllText(Path.Combine(directory.Path, "config.json")), "Hiding cannot overwrite remembered geometry");
+                await first.RestoreAsync(pid, state with { VideoWidth = 1280, VideoHeight = 1024 }, CancellationToken.None);
+                Check(visibility.Placement == saved, "Automatic following retains custom dimensions even when the video's aspect changes");
+                await video.ExecuteAsync(session.Page, new("ensurePipClosed"));
+                await first.ObserveAsync(pid, false, CancellationToken.None);
+                Check(store.Load().Settings.PipPlacement == saved, "Closing native PiP cannot save its off-screen source coordinates");
+            }
+
+            var nextStore = new JsonSettingsStore(Path.Combine(directory.Path, "config.json"));
+            var nextSettings = nextStore.Load().Settings;
+            using var next = new WindowsPipController(nextSettings, nextStore) { HelperWindow = helper };
+            var reopened = await video.ExecuteAsync(session.Page, new("ensurePip"));
+            await next.RestoreAsync(pid, reopened, CancellationToken.None);
+            Check(next.MouseVisibility.Placement == saved, "A new controller restores layout loaded from disk");
+            await next.RestoreAsync(pid, reopened, CancellationToken.None);
+            Check(next.MouseVisibility.Placement == saved, "Repeated automatic placement never resets custom layout");
+
+            nextSettings.PipPlacement = saved with { Left = 100000, Top = 100000 };
+            await next.RestoreAsync(pid, reopened, CancellationToken.None);
+            var recovered = next.MouseVisibility.Placement!;
+            var nearest = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+            GetMonitorInfo(MonitorFromWindow(next.MouseVisibility.FrameWindowHandle, 2), ref nearest);
+            Check(recovered.Left >= nearest.Work.Left && recovered.Top >= nearest.Work.Top &&
+                recovered.Left + recovered.Width <= nearest.Work.Right && recovered.Top + recovered.Height <= nearest.Work.Bottom,
+                "A removed display or off-screen setting restores inside a visible work area");
+
+            await next.PlaceAsync(pid, reopened, CancellationToken.None);
+            var reset = next.MouseVisibility.Placement!;
+            var resetMargin = (int)Math.Round(nextSettings.PipMargin * GetDpiForWindow(helper) / 96d);
+            Check(reset.Left == monitor.Work.Left + resetMargin && reset.Top + reset.Height == monitor.Work.Bottom - resetMargin,
+                "Explicit bottom-left reset overrides the remembered position");
+            Check(nextStore.Load().Settings.PipPlacement == reset, "Explicit reset is remembered for the next launch");
+            Console.WriteLine("PiP layout: factory defaults, real drag/resize save, hide/close isolation, disk reload, automatic restore, display recovery and reset passed.");
+        }
+        finally { SetCursorPos(originalCursor.X, originalCursor.Y); }
     }
 
     private static ulong CaptureEmbeddedFrame(nint window, string root, string name)

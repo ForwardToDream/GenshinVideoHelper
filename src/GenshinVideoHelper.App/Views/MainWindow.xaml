@@ -159,11 +159,11 @@
          </Grid>
          <Separator Margin="0,18,0,18" />
          <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="90" /><ColumnDefinition /><ColumnDefinition Width="65" /></Grid.ColumnDefinitions>
-          <TextBlock Text="浮窗宽度" VerticalAlignment="Center" />
+          <TextBlock Text="默认宽度" VerticalAlignment="Center" />
           <Slider x:Name="PipWidthSlider" Grid.Column="1" Minimum="280" Maximum="800" TickFrequency="20" IsSnapToTickEnabled="True" Margin="12,0,15,0" VerticalAlignment="Center" ValueChanged="PipWidth_Changed" />
           <TextBlock x:Name="PipWidthLabel" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="{StaticResource AccentBrush}" />
          </Grid>
-         <TextBlock Text="按视频比例调整高度。改宽度后点击启动页“放回左下角”应用；下次自动开启也会使用新宽度。" Style="{StaticResource SecondaryText}" Margin="0,11,0,0" />
+         <TextBlock Text="拖动或缩放浮窗后自动记忆布局。默认宽度用于首次开启或“放回左下角”。" Style="{StaticResource SecondaryText}" Margin="0,11,0,0" />
         </StackPanel></Border>
         <StackPanel Margin="3,0,3,0">
          <TextBlock x:Name="ConfigPathText" Style="{StaticResource SecondaryText}" Margin="0,0,0,10" />

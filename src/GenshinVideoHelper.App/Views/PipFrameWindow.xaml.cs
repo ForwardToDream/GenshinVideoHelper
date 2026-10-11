@@ -1,9 +1,12 @@
 using System.Runtime.InteropServices;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Threading;
 using GenshinVideoHelper.App.Native;
 using GenshinVideoHelper.Core.Models;
+using GenshinVideoHelper.Core.Settings;
 using static GenshinVideoHelper.App.Native.PipVideoSurface;
 
 namespace GenshinVideoHelper.App;
@@ -16,10 +19,17 @@ public partial class PipFrameWindow : Window
     private readonly nint _handle;
     private PipVideoSurface? _video;
     private bool _hidden;
+    private bool _applyingPlacement;
+    private PipPlacement? _observedPlacement, _pendingPlacement;
+    private readonly DispatcherTimer _placementTimer = new(DispatcherPriority.Background)
+        { Interval = TimeSpan.FromMilliseconds(150) };
     private PipVisibilityMode? _mode;
     public nint WindowHandle => _handle;
     public nint VideoWindowHandle => _video?.VideoWindow ?? 0;
     public bool IsVideoEmbedded => _video?.IsAttached == true;
+    public event Action<PipPlacement>? PlacementChanged;
+    public PipPlacement? Placement => _video is not null && GetWindowRect(_handle, out var bounds)
+        ? new(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top) : null;
 
     public PipFrameWindow()
     {
@@ -27,9 +37,10 @@ public partial class PipFrameWindow : Window
         _handle = new WindowInteropHelper(this).EnsureHandle();
         SetWindowLong(_handle, -20, GetWindowLong(_handle, -20) | 0x80 | 0x08000000);
         HwndSource.FromHwnd(_handle)!.AddHook(WindowMessages);
+        _placementTimer.Tick += (_, _) => FlushPlacement();
     }
 
-    public void Attach(nint pip)
+    public void Attach(nint pip, PipPlacement? placement = null)
     {
         if (VideoWindowHandle == pip) return;
         ReleaseVideo();
@@ -39,18 +50,21 @@ public partial class PipFrameWindow : Window
         var bar = (int)Math.Round(HeightDip * scale);
         Width = (bounds.Right - bounds.Left) / scale + BorderDip * 2;
         Height = (bounds.Bottom - bounds.Top) / scale + HeightDip + BorderDip * 2;
-        SetWindowPos(_handle, new nint(-1), bounds.Left - border, bounds.Top - bar - border,
-            bounds.Right - bounds.Left + border * 2, bounds.Bottom - bounds.Top + bar + border * 2, 0x0010);
+        ApplyBounds(bounds.Left - border, bounds.Top - bar - border,
+            bounds.Right - bounds.Left + border * 2, bounds.Bottom - bounds.Top + bar + border * 2);
         try
         {
+            _applyingPlacement = true;
             _video = new PipVideoSurface(pip, _handle);
             PipWindowService.RegisterFrame(pip, this);
+            if (placement is { IsValid: true }) RestorePlacement(placement);
             _hidden = false;
             Show();
             UpdateLayout();
             UpdateVideo();
         }
         catch { ReleaseVideo(); Hide(); throw; }
+        finally { _applyingPlacement = false; _observedPlacement = Placement; }
     }
 
     public void Place(int left, int bottom, int videoWidth, int videoHeight)
@@ -60,9 +74,56 @@ public partial class PipFrameWindow : Window
         var bar = (int)Math.Round(HeightDip * scale);
         var width = videoWidth + border * 2;
         var height = videoHeight + bar + border * 2;
-        SetWindowPos(_handle, new nint(-1), left, bottom - height, width, height, 0x0010);
-        UpdateLayout();
-        UpdateVideo();
+        ApplyBounds(left, bottom - height, width, height);
+    }
+
+    public void RestorePlacement(PipPlacement placement)
+    {
+        if (!placement.IsValid) return;
+        var bounds = new NativeBounds { Left = placement.Left, Top = placement.Top,
+            Right = placement.Left + placement.Width, Bottom = placement.Top + placement.Height };
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(MonitorFromRect(ref bounds, 2), ref info))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        var work = info.Work;
+        var scale = Math.Max(96, GetDpiForWindow(_handle)) / 96d;
+        var workWidth = work.Right - work.Left;
+        var workHeight = work.Bottom - work.Top;
+        var width = Math.Clamp(placement.Width, Math.Min(workWidth, (int)Math.Ceiling(MinWidth * scale)), workWidth);
+        var height = Math.Clamp(placement.Height, Math.Min(workHeight, (int)Math.Ceiling(MinHeight * scale)), workHeight);
+        ApplyBounds(Math.Clamp(placement.Left, work.Left, work.Right - width),
+            Math.Clamp(placement.Top, work.Top, work.Bottom - height), width, height);
+    }
+
+    private void ApplyBounds(int left, int top, int width, int height)
+    {
+        FlushPlacement();
+        var wasApplying = _applyingPlacement;
+        _applyingPlacement = true;
+        try
+        {
+            if (!SetWindowPos(_handle, new nint(-1), left, top, width, height, 0x0010))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            UpdateLayout();
+            UpdateVideo();
+        }
+        finally { _applyingPlacement = wasApplying; _observedPlacement = Placement; }
+    }
+
+    private void ObservePlacement()
+    {
+        if (_applyingPlacement || Placement is not { IsValid: true } placement || placement == _observedPlacement) return;
+        _observedPlacement = _pendingPlacement = placement;
+        _placementTimer.Stop();
+        _placementTimer.Start();
+    }
+
+    public void FlushPlacement()
+    {
+        _placementTimer.Stop();
+        var placement = _pendingPlacement;
+        _pendingPlacement = null;
+        if (placement is not null) PlacementChanged?.Invoke(placement);
     }
 
     public void SetMode(PipVisibilityMode mode)
@@ -103,6 +164,7 @@ public partial class PipFrameWindow : Window
 
     public void ReleaseVideo(bool restoreVideo = true)
     {
+        FlushPlacement();
         if (_video is null) return;
         PipWindowService.UnregisterFrame(_video.VideoWindow);
         _video.Release(restoreVideo);
@@ -124,7 +186,8 @@ public partial class PipFrameWindow : Window
     private nint WindowMessages(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
         if (message == 0x0021) { handled = true; return 3; } // MA_NOACTIVATE
-        if (message == 0x0047 || message == 0x02E0) UpdateVideo(); // position/size or monitor DPI
+        if (message == 0x0047 || message == 0x02E0) { UpdateVideo(); ObservePlacement(); } // position/size or monitor DPI
+        if (message == 0x0232) FlushPlacement(); // a drag/resize gesture has ended
         return 0;
     }
     protected override void OnClosed(EventArgs e)
@@ -134,6 +197,9 @@ public partial class PipFrameWindow : Window
     }
 
     [StructLayout(LayoutKind.Sequential)] private struct ScreenPoint { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] private struct MonitorInfo { public int Size; public NativeBounds Monitor, Work; public uint Flags; }
+    [DllImport("user32.dll")] private static extern nint MonitorFromRect(ref NativeBounds bounds, uint flags);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
     [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint window);
     [DllImport("user32.dll")] private static extern int GetWindowLong(nint window, int index);
     [DllImport("user32.dll")] private static extern int SetWindowLong(nint window, int index, int value);
@@ -141,6 +207,6 @@ public partial class PipFrameWindow : Window
     [DllImport("user32.dll")] private static extern bool GetWindowRect(nint window, out NativeBounds bounds);
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out ScreenPoint point);
     [DllImport("user32.dll")] private static extern nint SendMessage(nint window, int message, nint wParam, nint lParam);
-    [DllImport("user32.dll")] private static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] private static extern bool PostMessage(nint window, int message, nint wParam, nint lParam);
 }

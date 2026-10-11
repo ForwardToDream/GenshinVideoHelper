@@ -40,6 +40,8 @@ internal sealed class FakeEpisodes : IEpisodeProvider
 internal sealed class FakePip : IPipController
 {
     public int Placements { get; private set; }
+    public int Restores { get; private set; }
     public Task ObserveAsync(int pid, bool enabled, CancellationToken token) => Task.CompletedTask;
     public Task PlaceAsync(int pid, VideoState state, CancellationToken token) { Placements++; return Task.CompletedTask; }
+    public Task RestoreAsync(int pid, VideoState state, CancellationToken token) { Restores++; return Task.CompletedTask; }
 }

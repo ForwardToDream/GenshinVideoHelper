@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using GenshinVideoHelper.Core.Models;
 using GenshinVideoHelper.Core.Diagnostics;
+using GenshinVideoHelper.Core.Settings;
 
 namespace GenshinVideoHelper.App.Native;
 
@@ -10,6 +11,8 @@ public sealed class PipMouseVisibilityService : IDisposable
 {
     private readonly DispatcherTimer _timer = new(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(50) };
     private readonly bool _pollAutomatically;
+    private readonly Func<PipPlacement?>? _getPlacement;
+    private readonly Action<PipPlacement>? _placementChanged;
     private PipFrameWindow? _frame;
     private nint _window;
     private bool _hiddenByUs, _disposed;
@@ -18,10 +21,15 @@ public sealed class PipMouseVisibilityService : IDisposable
     public nint WindowHandle => _window;
     public PipVisibilityMode Mode { get; private set; } = PipVisibilityMode.Automatic;
     public nint FrameWindowHandle => _frame?.WindowHandle ?? 0;
+    public PipPlacement? Placement => _frame?.Placement;
+    public void FlushPlacement() => _frame?.FlushPlacement();
 
-    public PipMouseVisibilityService(bool pollAutomatically = true)
+    public PipMouseVisibilityService(bool pollAutomatically = true, Func<PipPlacement?>? getPlacement = null,
+        Action<PipPlacement>? placementChanged = null)
     {
         _pollAutomatically = pollAutomatically;
+        _getPlacement = getPlacement;
+        _placementChanged = placementChanged;
         _timer.Tick += (_, _) =>
         {
             try { Refresh(); }
@@ -66,10 +74,14 @@ public sealed class PipMouseVisibilityService : IDisposable
             _window = PipWindowService.FindPip(BrowserProcessId);
         }
         if (_window == 0) return;
-        _frame ??= new PipFrameWindow();
+        if (_frame is null)
+        {
+            _frame = new PipFrameWindow();
+            _frame.PlacementChanged += placement => _placementChanged?.Invoke(placement);
+        }
         if (_frame.VideoWindowHandle != _window)
         {
-            try { _frame.Attach(_window); }
+            try { _frame.Attach(_window, _getPlacement?.Invoke()); }
             catch { _timer.Stop(); ReleaseFrame(); _window = 0; throw; }
             AppLog.Info("Pip", $"浮窗 0x{_window:X} 已嵌入统一外框。");
         }
