@@ -120,7 +120,7 @@ internal sealed class CdpConnections : IDisposable
                         chunk = await _socket.ReceiveAsync(buffer.AsMemory(), _lifetime.Token).ConfigureAwait(false);
                         if (chunk.MessageType == WebSocketMessageType.Close) throw new IOException("浏览器已断开连接。");
                         message.Write(buffer, 0, chunk.Count);
-                        if (message.Length > 1024 * 1024) throw new IOException("浏览器响应过大。");
+                        if (message.Length > 16 * 1024 * 1024) throw new IOException("浏览器响应过大。");
                     } while (!chunk.EndOfMessage);
                     using var json = JsonDocument.Parse(message.ToArray());
                     var root = json.RootElement;

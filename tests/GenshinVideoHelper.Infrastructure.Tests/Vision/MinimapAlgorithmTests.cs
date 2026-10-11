@@ -52,7 +52,17 @@ public sealed class MinimapAlgorithmTests
         var result=analyzer.Analyze(v,g,false);Assert.True(result.Marker is not null,result.Status);
         Assert.Equal(fixedDisk,result.Marker.Disk);
         Assert.InRange(MinimapImage.Distance(result.Marker.X,result.Marker.Y,168,125),0,6);
-        Assert.Null(analyzer.GamePlan.Region);Assert.Null(analyzer.VideoPlan.Region);
+        Assert.Null(analyzer.GamePlan.Region);Assert.NotNull(analyzer.VideoPlan.Region);
+        var crop=analyzer.VideoPlan.Region.Value;
+        Assert.True(crop.Width*crop.Height<guide.Width*guide.Height);
+        using var clipped=new Mat(guide,new Rect(crop.X,crop.Y,crop.Width,crop.Height));
+        using var next=Frame(clipped,crop);
+        var cropped=analyzer.Analyze(next,g,false);Assert.True(cropped.Marker is not null,cropped.Status);
+        Assert.InRange(MinimapImage.Distance(cropped.Marker.X,cropped.Marker.Y,result.Marker.X,result.Marker.Y),0,4);
+        using var blank=new Mat(crop.Height,crop.Width,MatType.CV_8UC3,Scalar.Black);
+        using var lostCrop=Frame(blank,crop);
+        Assert.NotNull(analyzer.Analyze(lostCrop,g,false).Marker);
+        Assert.Null(analyzer.VideoPlan.Region); // Retry full search without blanking a good match.
     }
     [Fact] public void MissingGuideAndBlackUserClearThenRecover()
     {

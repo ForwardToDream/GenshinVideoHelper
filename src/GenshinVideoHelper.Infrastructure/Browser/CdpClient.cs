@@ -46,7 +46,7 @@ public sealed class CdpClient : IDisposable
                     if (chunk.MessageType == WebSocketMessageType.Close)
                         throw new IOException("浏览器已断开连接，请重新打开视频。");
                     message.Write(buffer, 0, chunk.Count);
-                    if (message.Length > 1024 * 1024)
+                    if (message.Length > 16 * 1024 * 1024)
                         throw new IOException("浏览器响应过大，已停止本次操作。");
                 } while (!chunk.EndOfMessage);
 

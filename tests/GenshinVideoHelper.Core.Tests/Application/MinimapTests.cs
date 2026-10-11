@@ -58,7 +58,7 @@ public sealed class MinimapTests
         var updates=new System.Collections.Concurrent.ConcurrentQueue<VisionUpdate>();
         var analyzer=new SequenceAnalyzer(call=>
         {
-            if(call==4)video.Epoch="new-episode";
+            if(call==3)video.Epoch="new-episode";
             return call switch
             {
                 1 or 3 or 6=>new("matched",new(1,1,null,0xff0000,new(10,10,9))),
@@ -80,6 +80,43 @@ public sealed class MinimapTests
         Assert.False(received[4].RetainMarker);Assert.NotNull(received[5].Marker);
         var times=analyzer.Times.ToArray();
         Assert.InRange(Stopwatch.GetElapsedTime(times[1],times[2]).TotalMilliseconds,0,800);
+    }
+    [Theory][InlineData(false)][InlineData(true)]
+    public async Task SlowGuideReadDoesNotBlockMovingGameOrRejectAnOlderGuide(bool paused)
+    {
+        var video=new SlowVideo(paused);var game=new Game();
+        using var ready=new SemaphoreSlim(0);
+        var positions=new System.Collections.Concurrent.ConcurrentQueue<double>();
+        int matches=0;
+        var analyzer=new SequenceAnalyzer(_=>new("matched",new(++matches,1,null,0xff0000,new(10,10,9))));
+        using var coordinator=new MinimapFollowCoordinator(video,game,analyzer);
+        coordinator.Updated+=u=>{if(u.Marker is {} marker){positions.Enqueue(marker.X);ready.Release();}};
+        coordinator.Configure(Intent(1));
+        try
+        {
+            await video.Pending.Task.WaitAsync(TimeSpan.FromSeconds(3),TestContext.Current.CancellationToken);
+            for(int i=0;i<6;i++)Assert.True(await ready.WaitAsync(TimeSpan.FromSeconds(2),TestContext.Current.CancellationToken));
+            Assert.Equal(2,video.Reads); // No duplicate requests while the browser is busy.
+            Assert.True(game.Frames.Count>=6);Assert.True(positions.Distinct().Count()>=6);
+            var times=analyzer.Times.ToArray();
+            Assert.InRange(Stopwatch.GetElapsedTime(times[0],times[5]).TotalMilliseconds,0,1200);
+        }
+        finally {await coordinator.StopAsync();}
+        Assert.Throws<ObjectDisposedException>(()=>video.First.Pixels);
+        Assert.All(game.Frames,f=>Assert.Throws<ObjectDisposedException>(()=>f.Pixels));
+    }
+    private sealed class SlowVideo(bool paused):IVideoFrameSource
+    {
+        public int Reads;
+        public readonly TaskCompletionSource Pending=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly VisionFrame First=new(10,10,3,20,20,new(0,0,10,10),"epoch",
+            Stopwatch.GetTimestamp()-(long)(Stopwatch.Frequency*5d),paused,1);
+        public async Task<VisionFrame?> CaptureAsync(BrowserPage page,VideoIdentity identity,CapturePlan plan,CancellationToken token)
+        {
+            if(++Reads==1)return First;
+            Pending.TrySetResult();
+            await Task.Delay(Timeout.Infinite,token);return null;
+        }
     }
     private sealed class SequenceAnalyzer(Func<int,MapAnalysis> next):IMinimapAnalyzer
     {

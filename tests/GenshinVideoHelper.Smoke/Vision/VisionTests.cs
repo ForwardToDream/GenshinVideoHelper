@@ -80,8 +80,8 @@ internal static class VisionTests
         Check(overlay.IsVisible,"One transient miss does not hide a current marker");
         await Task.Delay(160);
         overlay.Update(new(1,"transient",CapturedAt:Stopwatch.GetTimestamp(),RetainMarker:true),5);
-        await Task.Delay(160);
-        Check(!overlay.IsVisible,"Repeated transient misses never renew the old marker timestamp");
+        await Task.Delay(650);
+        Check(overlay.IsVisible,"Slow sampling and transient misses keep the last trusted marker visible");
         overlay.Update(marker! with{CapturedAt=Stopwatch.GetTimestamp()},5);
         Check(overlay.IsVisible,"Fresh reliable frame restores marker");
         overlay.Update(new(1,"black map"),5);
@@ -95,8 +95,9 @@ internal static class VisionTests
         int port=((System.Net.IPEndPoint)portProbe.LocalEndpoint).Port;portProbe.Stop();
         using var server=new System.Net.HttpListener();server.Prefixes.Add($"http://127.0.0.1:{port}/");server.Start();
         byte[] media=await File.ReadAllBytesAsync(Path.Combine(root,"artifacts","test-media","sample.mp4"));
+        byte[] hdMedia=await File.ReadAllBytesAsync(Path.Combine(root,"artifacts","test-media","sample-hd.mp4"));
         int serverStopping=0;
-        var serve=Task.Run(async()=>{try{while(server.IsListening){var request=await server.GetContextAsync();bool mp4=request.Request.RawUrl!.Contains(".mp4");byte[] body=mp4?media:System.Text.Encoding.UTF8.GetBytes("<video muted autoplay style='width:320px' src='/sample.mp4'></video>");request.Response.ContentType=mp4?"video/mp4":"text/html";request.Response.ContentLength64=body.Length;await request.Response.OutputStream.WriteAsync(body);request.Response.Close();}}catch(Exception)when(Volatile.Read(ref serverStopping)!=0||!server.IsListening){}});
+        var serve=Task.Run(async()=>{try{while(server.IsListening){var request=await server.GetContextAsync();bool mp4=request.Request.RawUrl!.Contains(".mp4");byte[] body=mp4?(request.Request.RawUrl!.Contains("hd.mp4")?hdMedia:media):System.Text.Encoding.UTF8.GetBytes("<video muted autoplay style='width:320px' src='/sample.mp4'></video>");request.Response.ContentType=mp4?"video/mp4":"text/html";request.Response.ContentLength64=body.Length;await request.Response.OutputStream.WriteAsync(body);request.Response.Close();}}catch(Exception)when(Volatile.Read(ref serverStopping)!=0||!server.IsListening){}});
         await using var browser=await ChromiumFixture.StartAsync(root,headed:true);
         using var client=new CdpClient(reuseConnections:true);
         var endpoint=new Uri(browser.Page.WebSocketDebuggerUrl);
@@ -111,7 +112,7 @@ internal static class VisionTests
         using var cold=await source.CaptureAsync(browser.Page,identity,new(),CancellationToken.None);
         Check(cold is not null&&cold.SourceWidth==640&&cold.Region.Width==213&&cold.Width==213&&cold.Height==180,"Video samples intrinsic size, not CSS size");
         using var local=await source.CaptureAsync(browser.Page,identity,new(new(10,20,120,120),cold!.Epoch),CancellationToken.None);
-        Check(local is not null&&local.Width==213&&local.Region.X==0,"Guide always uses native one-sixth search ROI");
+        Check(local is not null&&local.Width==120&&local.Region==new FrameRegion(10,20,120,120),"Known guide disk uses native crop pixels");
         await video.ExecuteAsync(browser.Page,new("toggle"));await Task.Delay(150);
         await video.ExecuteAsync(browser.Page,new("rate",1.5));await Task.Delay(100);
         Check(Volatile.Read(ref activities)>=2 && Volatile.Read(ref invalidations)==0,
@@ -120,11 +121,48 @@ internal static class VisionTests
         await Task.Delay(100);
         Check(Volatile.Read(ref invalidations)==0,"Unrelated video events do not reset the followed map");
         using(var paused=await source.CaptureAsync(browser.Page,identity,new(new(10,20,120,120),cold.Epoch),CancellationToken.None))
-            Check(paused is not null&&paused.Epoch==cold.Epoch&&paused.Region.X==0&&paused.Width==213,"Pause and rate preserve native guide search pixels");
+        {
+            Check(paused is not null&&paused.Epoch==cold.Epoch&&paused.Region.X==10&&paused.Width==120,"Pause and rate preserve native guide crop pixels");
+            using var reused=await source.CaptureAsync(browser.Page,identity,new(paused!.Region,paused.Epoch),CancellationToken.None);
+            Check(reused is not null&&reused.FrameId==paused.FrameId&&reused.Pixels.AsSpan(0,reused.Stride*reused.Height).SequenceEqual(paused.Pixels.AsSpan(0,paused.Stride*paused.Height)),
+                "Unchanged paused sample reuses exact decoded pixels");
+            var cached=await client.SendAsync(endpoint,"Runtime.evaluate",new{expression="window.__gvhVision.key",returnByValue=true});
+            Check(cached.GetProperty("result").GetProperty("value").GetString()==reused!.FrameId,"Pixel-cache acknowledgement remains tied to the source frame");
+        }
         await video.ExecuteAsync(browser.Page,new("seek",3,true));await Task.Delay(150);
         Check(Volatile.Read(ref invalidations)>0,"Seek immediately invalidates the minimap source");
         using var seek=await source.CaptureAsync(browser.Page,identity,new(new(10,20,120,120),cold.Epoch),CancellationToken.None);
         Check(seek is not null&&seek.Epoch!=cold.Epoch&&seek.Region.X==0,"Seek invalidates crop/epoch");
+        await client.SendAsync(endpoint,"Runtime.evaluate",new{expression="document.pictureInPictureElement.src='/hd.mp4';"});
+        VisionFrame? hd=null;
+        for(int i=0;i<50;i++)
+        {
+            try
+            {
+                await video.ExecuteAsync(browser.Page,new("ensurePlay"));
+                hd=await source.CaptureAsync(browser.Page,identity,new(),CancellationToken.None);
+                if(hd?.SourceHeight==1080)break;
+                hd?.Dispose();hd=null;
+            }
+            catch(InvalidOperationException){ }
+            await Task.Delay(100);
+        }
+        using(hd)
+        {
+            Check(hd is not null&&hd.Width==640&&hd.Height==540&&hd.Channels==4&&!hd.Paused,"1080p playing video retains exact native RGBA sample dimensions");
+            var timings=new List<double>();var frames=new HashSet<string>();
+            var plan=new CapturePlan(new(60,20,480,480),hd!.Epoch);
+            for(int i=0;i<15;i++)
+            {
+                var start=Stopwatch.GetTimestamp();
+                using var sample=await source.CaptureAsync(browser.Page,identity,plan,CancellationToken.None);
+                timings.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+                Check(sample is not null&&!sample.Paused&&sample.Width==480&&sample.Height==480,"Playing guide yields consecutive native cropped frames");
+                frames.Add(sample!.FrameId!);await Task.Delay(100);
+            }
+            Check(frames.Count>=10,"Playing video delivers changing decoded samples");
+            Console.WriteLine($"1080p native capture ({SmokeBrowser.Kind}): 15 playing frames, median {Median(timings):F1} ms, max {timings.Max():F1} ms; crop {480*480*4:N0} raw bytes.");
+        }
         using var stale=await source.CaptureAsync(browser.Page,identity with{Part=2},new(),CancellationToken.None);
         Check(stale is null,"Wrong episode rejects the frame");
         await video.ExecuteAsync(browser.Page,new("ensurePipClosed"));

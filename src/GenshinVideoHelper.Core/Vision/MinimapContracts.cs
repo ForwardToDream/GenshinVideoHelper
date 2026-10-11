@@ -46,14 +46,16 @@ public sealed class VisionFrame : IDisposable
     public string Epoch { get; }
     public bool Paused { get; }
     public double MediaTime { get; }
+    public string? FrameId { get; }
     public VisionFrame(int width, int height, int channels, int sourceWidth, int sourceHeight,
-        FrameRegion region, string epoch, long capturedAt = 0, bool paused = false, double mediaTime = 0)
+        FrameRegion region, string epoch, long capturedAt = 0, bool paused = false, double mediaTime = 0, string? frameId = null)
     {
         if (width <= 0 || height <= 0 || channels is not (3 or 4)) throw new ArgumentOutOfRangeException(nameof(width));
         _pixels = ArrayPool<byte>.Shared.Rent(checked(width * height * channels));
         Width = width; Height = height; Channels = channels; SourceWidth = sourceWidth; SourceHeight = sourceHeight;
         Region = region; Epoch = epoch; CapturedAt = capturedAt == 0 ? Stopwatch.GetTimestamp() : capturedAt;
         Paused = paused; MediaTime = mediaTime;
+        FrameId = frameId;
     }
     public void Dispose()
     {
@@ -74,7 +76,7 @@ public interface IGameFrameSource : IDisposable
     void Reset();
 }
 public sealed record MapMarker(double X, double Y, double? DirectionRadians, uint Color, MapDisk Disk);
-// Retain only bridges a transient miss; it never renews the last marker's capture timestamp.
+// Transient misses retain the last match; source changes and hard rejections clear it.
 public sealed record MapAnalysis(string Status, MapMarker? Marker = null, double Correlation = 0, int Inliers = 0,
     bool RetainMarker = false);
 public interface IMinimapAnalyzer : IDisposable

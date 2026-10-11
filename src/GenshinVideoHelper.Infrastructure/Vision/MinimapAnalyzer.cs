@@ -8,31 +8,59 @@ public sealed class MinimapAnalyzer : IMinimapAnalyzer
     private readonly TerrainRegistration _terrain=new();
     private readonly CameraDirection _direction=new();
     private uint _color;
-    public CapturePlan VideoPlan => new();
+    private CapturePlan _videoPlan=new();
+    private Mat? _guideMap;
+    private VisionFrame? _guideFrame;
+    private string? _guideFrameId;
+    public CapturePlan VideoPlan => _videoPlan;
     public CapturePlan GamePlan => new();
     public string LastRegistrationFailure => _terrain.Failure;
     public double LastCorrelation => _terrain.Correlation;
     public int LastInliers => _terrain.Inliers;
     public MinimapAnalyzer() { Cv2.SetNumThreads(1); }
-    public void Reset() { _color=0; }
-    public void Dispose() { _terrain.Dispose();_direction.Dispose(); }
+    public void Reset()
+    {
+        _color=0;_videoPlan=new();_guideFrame=null;_guideFrameId=null;
+        _guideMap?.Dispose();_guideMap=null;_terrain.ResetGuide();
+    }
+    public void Dispose() { Reset();_terrain.Dispose();_direction.Dispose(); }
     public static bool IsBlack(Mat image) => TerrainRegistration.IsBlack(image);
     public static Mat TerrainMask(Mat image) => TerrainRegistration.Mask(image);
     public (double A,double B,double Tx,double Ty,double Correlation,int Inliers)? Register(Mat video,Mat game) => _terrain.Register(video,game);
 
     public MapAnalysis Analyze(VisionFrame video,VisionFrame game,bool direction)
     {
-        using var guidePixels=MinimapImage.ToBgr(video);
-        var guideDisk=GuideDiskDetector.Detect(guidePixels,video);
-        if(guideDisk is not {} guide)return new("视频：未找到小地图圆盘");
+        if(_guideMap is null || !(ReferenceEquals(video,_guideFrame) || video.FrameId is not null && video.FrameId==_guideFrameId))
+        {
+            using var guidePixels=MinimapImage.ToBgr(video);
+            var guideDisk=GuideDiskDetector.Detect(guidePixels,video);
+            if(guideDisk is not {} guide)
+            {
+                _videoPlan=new(); // A moved HUD is reacquired in the complete one-sixth search region.
+                var bounds=MinimapGeometry.GuideSearchRegion(video.SourceWidth,video.SourceHeight);
+                if(_guideMap is null || video.Region==bounds)
+                {
+                    _guideMap?.Dispose();_guideMap=null;_terrain.ResetGuide();
+                    return new("视频：未找到小地图圆盘");
+                }
+                // An incomplete crop must not suppress an otherwise valid guide. Retry the full search next.
+            }
+            else
+            {
+                _guideMap?.Dispose();_guideMap=MinimapImage.Normalize(guidePixels,video,guide);
+                _guideFrame=video;_guideFrameId=video.FrameId;
+                var bounds=MinimapGeometry.GuideSearchRegion(video.SourceWidth,video.SourceHeight);
+                _videoPlan=new(guide.CaptureRegion(bounds.Width,bounds.Height),video.Epoch);
+            }
+        }
         // The user HUD is fixed. No arrow, circle detection or rim validation runs on this source.
         var user=MinimapGeometry.GameDisk(game.SourceHeight);
         if(user.X+user.Radius>game.SourceWidth||user.Y+user.Radius>game.SourceHeight)
             return new("游戏画面尺寸不足");
         using var userPixels=MinimapImage.ToBgr(game);
-        using var v=MinimapImage.Normalize(guidePixels,video,guide);
+        var v=_guideMap;
         using var g=MinimapImage.Normalize(userPixels,game,user);
-        var result=Register(v,g);
+        var result=_terrain.Register(v,g,cacheGuide:true);
         if(result is not {} registration)return new($"地图匹配未通过：{LastRegistrationFailure}",
             Correlation:LastCorrelation,Inliers:LastInliers,RetainMarker:_terrain.RetainMarker);
         var(a,b,tx,ty,corr,inliers)=registration;

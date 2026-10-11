@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -19,7 +18,6 @@ public sealed class MinimapOverlay : IDisposable
     private Bitmap? _surface;
     private int _size,_lastMarkerSize,_x,_y;
     private MapMarker? _last;
-    private long _capturedAt;
     private bool _visible;
     private readonly DispatcherTimer _watchdog=new(){Interval=TimeSpan.FromMilliseconds(40)};
     public bool IsVisible => _visible;
@@ -29,11 +27,10 @@ public sealed class MinimapOverlay : IDisposable
         if(update.Marker is not {} marker)
         {
             if(!update.RetainMarker || GameWindowCapture.GetForegroundWindow()!=_game)Hide();
-            return; // Do not renew the timestamp of the last trusted frame.
+            return;
         }
-        if(GameWindowCapture.GetForegroundWindow()!=update.Window ||
-            Stopwatch.GetElapsedTime(update.CapturedAt).TotalMilliseconds>250) {Hide();return;}
-        _game=update.Window;_capturedAt=update.CapturedAt;
+        if(GameWindowCapture.GetForegroundWindow()!=update.Window) {Hide();return;}
+        _game=update.Window;
         var origin=new Point();GameWindowCapture.ClientToScreen(_game,ref origin);
         var scale=marker.Disk.Radius/100;
         int size=Math.Clamp(((int)Math.Ceiling((30+markerSize+5)*scale)+2)*2,32,768);
@@ -74,7 +71,7 @@ public sealed class MinimapOverlay : IDisposable
     {
         if(!_visible)return;
         if(GameWindowCapture.GetForegroundWindow()!=_game || !GameWindowCapture.IsWindow(_game) ||
-            GameWindowCapture.IsIconic(_game) || Stopwatch.GetElapsedTime(_capturedAt).TotalMilliseconds>250){Hide();return;}
+            GameWindowCapture.IsIconic(_game)){Hide();return;}
         var origin=new Point();GameWindowCapture.ClientToScreen(_game,ref origin);
         if(_last is {} m && (origin.X+(int)Math.Round(m.X)-_size/2!=_x || origin.Y+(int)Math.Round(m.Y)-_size/2!=_y))Hide();
     }

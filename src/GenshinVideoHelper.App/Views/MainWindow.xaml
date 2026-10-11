@@ -70,7 +70,7 @@
         </StackPanel></Border>
         <Border Style="{StaticResource Card}"><StackPanel>
          <TextBlock Text="识别条件" Style="{StaticResource CardTitle}" />
-         <TextBlock Text="游戏保持默认小地图布局；指导小地图位于画面左 1/3、上 1/2，且两端有重叠地形。建议将指导视频切到 1080p。地图缺失、无重叠地形或结果过期时不显示标记；视线不可靠时只显示圆点。" Style="{StaticResource SecondaryText}" TextWrapping="Wrap" />
+         <TextBlock Text="游戏保持默认小地图布局；指导小地图位于画面左 1/3、上 1/2，且两端有重叠地形。建议将指导视频切到 1080p。短暂采集延迟或失配会保留标记；地图缺失、无重叠地形或切出游戏时隐藏，视线不可靠时只显示圆点。" Style="{StaticResource SecondaryText}" TextWrapping="Wrap" />
          <TextBlock Text="圆点颜色根据附近地形自动调整。暂时隐藏画中画仍可识别，主动关闭画中画后停止标记。建议游戏使用无边框窗口模式。" Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="0,8,0,0" />
         </StackPanel></Border>
        </StackPanel>

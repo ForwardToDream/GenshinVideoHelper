@@ -8,12 +8,15 @@ public sealed class TerrainRegistration : IDisposable
     private readonly ORB _orb = ORB.Create(700,1.12f,8,12,0,2,ORBScoreType.Harris,19,8);
     private readonly BFMatcher _matcher = new(NormTypes.Hamming);
     private readonly CLAHE _contrast = Cv2.CreateCLAHE(3,new Size(4,4));
+    private Mat? _guideImage;
+    private Features? _guideFeatures;
     public string Failure { get; private set; } = "";
     public double Correlation { get; private set; }
     public int Inliers { get; private set; }
     public bool RetainMarker { get; private set; }
 
-    public void Dispose() { _orb.Dispose(); _matcher.Dispose(); _contrast.Dispose(); }
+    public void ResetGuide() { _guideImage=null;_guideFeatures?.Dispose();_guideFeatures=null; }
+    public void Dispose() { ResetGuide();_orb.Dispose();_matcher.Dispose();_contrast.Dispose(); }
 
     public static unsafe Mat Mask(Mat image)
     {
@@ -84,13 +87,17 @@ public sealed class TerrainRegistration : IDisposable
         catch { data.Dispose();throw; }
     }
 
-    public (double A,double B,double Tx,double Ty,double Correlation,int Inliers)? Register(Mat guide,Mat user)
+    public (double A,double B,double Tx,double Ty,double Correlation,int Inliers)? Register(Mat guide,Mat user,bool cacheGuide=false)
     {
         if(guide.Size()!=new Size(212,212)||user.Size()!=new Size(212,212))throw new ArgumentException("地图必须归一化到212像素");
         Failure="";Correlation=0;Inliers=0;RetainMarker=false;
         (double,double,double,double,double,int)? Reject(string reason,bool retain=true)
         {Failure=reason;RetainMarker=retain;return null;}
-        using var source=Prepare(guide);using var target=Prepare(user);
+        using var transient=cacheGuide?null:Prepare(guide);
+        if(cacheGuide && !ReferenceEquals(guide,_guideImage))
+        { ResetGuide();_guideFeatures=Prepare(guide);_guideImage=guide; }
+        var source=transient??_guideFeatures!;
+        using var target=Prepare(user);
         if(source.Black||target.Black)return Reject(source.Black?"视频小地图全黑或未探索":"游戏小地图全黑或未探索",false);
         if(source.Descriptors.Empty()||target.Descriptors.Empty()||Math.Min(source.Points.Length,target.Points.Length)<8)
             return Reject("地形特征不足");

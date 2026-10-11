@@ -16,6 +16,10 @@ if ($Browser -or $Pip -or $Follow -or $Lifecycle -or $Vision -or $VisionBrowser)
     ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=24 -f lavfi -i sine=frequency=440 -t 20 -c:v libx264 -pix_fmt yuv420p -c:a aac -movflags +faststart -y (Join-Path $taskRoot 'artifacts/test-media/sample.mp4')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
+if ($Vision -or $VisionBrowser) {
+    ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=1920x1080:rate=30 -t 12 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -movflags +faststart -y (Join-Path $taskRoot 'artifacts/test-media/sample-hd.mp4')
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 $taskBrowserArgs = @()
 if ($Edge) { $taskBrowserArgs = @('--edge') }
 if ($Browser) {
