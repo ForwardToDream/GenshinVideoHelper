@@ -276,6 +276,7 @@ internal static class UiTests
         Check(((TextBlock)missingWindow.FindName("StatusText")).Text.Contains("不存在") && ((ComboBox)missingWindow.FindName("GuideVideoSelector")).Items.Count == 0 && ((TextBox)missingWindow.FindName("UrlInput")).IsEnabled, "Missing library preserves manual input and reports error");
         Capture(missingWindow, root, "ui-library-missing-compact.png", 860, 600);
         missingWindow.Close();
+        BrowserUiTests.Run(root);
         Console.WriteLine("WPF UI: five panels, progress editing, default/minimum sizes, full-row Start below episodes, part boundaries, long title and state preservation passed.");
     }
 

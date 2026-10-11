@@ -28,7 +28,7 @@ internal static class BrowserTests
 {
     public static async Task BrowserTestAsync(string root, bool headed)
     {
-        await using var session = await ChromeFixture.StartAsync(root, headed);
+        await using var session = await ChromiumFixture.StartAsync(root, headed);
         using var controller = new VideoController();
         using (var shared = new CdpClient(reuseConnections: true))
         {
@@ -92,7 +92,7 @@ internal static class BrowserTests
         using var episodeReader = new BilibiliEpisodeService(new FixtureHandler("{\"code\":-404}"));
         var info = await episodeReader.ReadAsync(session.Page with { Url = "https://www.bilibili.com/video/BV1hjgG6jEa6/?p=3" });
         Check(info.Episodes.Count == 4 && info.CurrentPart == 3, "Page episode metadata works before any video is present and does not require API");
-        Console.WriteLine("Actual Chrome/CDP: media selection, play/pause, seek boundaries, rate, mute and missing video passed.");
+        Console.WriteLine($"Actual {SmokeBrowser.Kind}/CDP: media selection, play/pause, seek boundaries, rate, mute and missing video passed.");
         await session.CloseTabAsync();
         var closedReported = false;
         try { await controller.ExecuteAsync(session.Page, new("status")); }
@@ -104,7 +104,7 @@ internal static class BrowserTests
 
     private static async Task TestAccountProbeAsync(string root)
     {
-        await using var fixture = await ChromeFixture.StartAsync(root, headed: false);
+        await using var fixture = await ChromiumFixture.StartAsync(root, headed: false);
         using var cdp = new CdpClient(reuseConnections: true);
         using var controller = new VideoController();
         var endpoint = new Uri(fixture.Page.WebSocketDebuggerUrl);
@@ -162,13 +162,13 @@ internal static class BrowserTests
         await Script("window.fetch=(_,options)=>new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new Error('aborted'))))");
         var started = Stopwatch.GetTimestamp();
         Check((await controller.ReadAccountAsync(page)).LoggedIn is null && Stopwatch.GetElapsedTime(started).TotalSeconds < 3.5, "Account HTTP request has a short bounded timeout");
-        Console.WriteLine("Chrome account probe: anonymous, logged-in, failures, timeout and denied quality passed.");
+        Console.WriteLine($"{SmokeBrowser.Kind} account probe: anonymous, logged-in, failures, timeout and denied quality passed.");
     }
 
     public static async Task BilibiliTestAsync(string root, bool headed = false, nint helperWindow = default)
     {
-        await using var session = await ChromeFixture.StartAsync(root, headed);
-        using var browser = new ChromeBrowser(session.ProfileDirectory);
+        await using var session = await ChromiumFixture.StartAsync(root, headed);
+        using var browser = SmokeBrowser.Create(session.ProfileDirectory);
         const string example = "https://www.bilibili.com/video/BV1hjgG6jEa6";
         await browser.OpenAsync(example);
         using var controller = new VideoController();

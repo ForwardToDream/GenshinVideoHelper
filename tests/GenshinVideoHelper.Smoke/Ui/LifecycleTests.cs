@@ -39,10 +39,10 @@ internal static class LifecycleTests
 
     public static async Task LifecycleUiTestAsync(string root)
     {
-        await using var owned = await ChromeFixture.StartAsync(root, headed: true);
-        await using var unrelated = await ChromeFixture.StartAsync(root, headed: true);
-        using var ownedBrowser = new ChromeBrowser(owned.ProfileDirectory);
-        using var unrelatedBrowser = new ChromeBrowser(unrelated.ProfileDirectory);
+        await using var owned = await ChromiumFixture.StartAsync(root, headed: true);
+        await using var unrelated = await ChromiumFixture.StartAsync(root, headed: true);
+        using var ownedBrowser = SmokeBrowser.Create(owned.ProfileDirectory);
+        using var unrelatedBrowser = SmokeBrowser.Create(unrelated.ProfileDirectory);
         // GetBrowserProcessId is normally called after Open; establish only a profile-scoped connection here.
         await ownedBrowser.GetPagesAsync();
         await unrelatedBrowser.GetPagesAsync();
@@ -59,11 +59,12 @@ internal static class LifecycleTests
         }
         var pip = PipWindowService.FindPip(ownedPid);
         Check(pip != 0, "Lifecycle starts with real native PiP");
-        var window = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { VideoUrl = "", SelectedVideoLibraryId = null }, owned.ProfileDirectory, episodeFactory: PreviewService))
+        var window = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { BrowserPreference = SmokeBrowser.Preference, VideoUrl = "", SelectedVideoLibraryId = null }, owned.ProfileDirectory, episodeFactory: PreviewService, enableWarmup: true, profileFor: _ => owned.ProfileDirectory))
         { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
         try
         {
             window.Show();
+            await window.Services.WarmupAsync();
             window.Services.Pip.MouseVisibility.TrackBrowser(ownedPid);
             Check(window.Services.Pip.MouseVisibility.FrameWindowHandle != 0 && GetWindowRect(pip, out var sourceBounds) && sourceBounds.Right < 0,
                 "Lifecycle owns an embedded GPU PiP surface");
@@ -89,12 +90,13 @@ internal static class LifecycleTests
             var staleProfile = staleDirectory.Path;
             var staleLines = await File.ReadAllLinesAsync(Path.Combine(unrelated.ProfileDirectory, "DevToolsActivePort"));
             await File.WriteAllLinesAsync(Path.Combine(staleProfile, "DevToolsActivePort"), [staleLines[0], "/devtools/browser/wrong-session"]);
-            using var stale = new ChromeBrowser(staleProfile);
+            using var stale = SmokeBrowser.Create(staleProfile);
             await stale.CloseAsync();
             Check(!unrelatedProcess.HasExited, "Stale port file cannot close a different browser session");
             using var startupDirectory = TestArtifacts.CreateTemp(root, "startup-exit");
             var startupProfile = startupDirectory.Path;
-            var startupWindow = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { VideoUrl = "https://www.bilibili.com/video/BV1hjgG6jEa6/?p=3", SelectedVideoLibraryId = null }, startupProfile, episodeFactory: PreviewService))
+            using var startingBrowser = SmokeBrowser.Create(startupProfile);
+            var startupWindow = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { BrowserPreference = SmokeBrowser.Preference, VideoUrl = "https://www.bilibili.com/video/BV1hjgG6jEa6/?p=3", SelectedVideoLibraryId = null }, startupProfile, episodeFactory: PreviewService, browser: startingBrowser))
             { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
             try
             {

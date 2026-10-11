@@ -141,11 +141,35 @@
          </Grid>
          <Button x:Name="FollowRetryButton" Content="重试自动跟随" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left" Margin="0,13,0,0" Visibility="Collapsed" Click="FollowRetry_Click" />
         </StackPanel></Border>
-        <TextBlock Text="保留 Chrome 视频页面。推荐游戏使用无边框窗口，最小化工具后快捷键继续生效。" Style="{StaticResource SecondaryText}" Margin="3,0,3,0" />
+        <TextBlock Text="保留浏览器视频页面。推荐游戏使用无边框窗口，最小化工具后快捷键继续生效。" Style="{StaticResource SecondaryText}" Margin="3,0,3,0" />
        </StackPanel>
       </ScrollViewer>
       <ScrollViewer x:Name="SettingsPage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
        <StackPanel Margin="24,0,24,20">
+        <Border x:Name="BrowserCard" Style="{StaticResource Card}" Height="128"><StackPanel>
+         <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <TextBlock Text="浏览器" Style="{StaticResource CardTitle}" Margin="0,0,18,0" VerticalAlignment="Center" />
+          <ComboBox x:Name="BrowserSelector" Grid.Column="1" SelectionChanged="Browser_Changed" AutomationProperties.Name="浏览器选择">
+           <ComboBox.ItemContainerStyle><Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
+             <Border x:Name="ItemBorder" Padding="10,9" Background="Transparent"><StackPanel>
+              <TextBlock Text="{Binding Content.Header, RelativeSource={RelativeSource TemplatedParent}}" TextTrimming="CharacterEllipsis" />
+              <TextBlock Text="{Binding Content.Detail, RelativeSource={RelativeSource TemplatedParent}}" Style="{StaticResource SecondaryText}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" Margin="0,4,0,0" />
+             </StackPanel></Border>
+             <ControlTemplate.Triggers>
+              <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource HoverBrush}" /></Trigger>
+              <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource SelectedBrush}" /></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ItemBorder" Property="Opacity" Value="0.45" /></Trigger>
+             </ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+           </Style></ComboBox.ItemContainerStyle>
+           <ComboBoxItem Content="自动" Tag="Auto" /><ComboBoxItem Content="Chrome" Tag="Chrome" /><ComboBoxItem Content="Edge" Tag="Edge" />
+          </ComboBox>
+          <Button x:Name="BrowserDetectButton" Grid.Column="2" Content="重新检测" Style="{StaticResource SmallSubtleButton}" Margin="10,0,0,0" Click="BrowserDetect_Click" />
+         </Grid>
+         <TextBlock x:Name="ActiveBrowserText" />
+         <TextBlock x:Name="BrowserSelectionHint" Style="{StaticResource SecondaryText}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" Margin="0,5,0,0" />
+        </StackPanel></Border>
         <Border Style="{StaticResource Card}"><StackPanel>
          <TextBlock Text="播放与浮窗" Style="{StaticResource CardTitle}" />
          <Grid><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="130" /></Grid.ColumnDefinitions>

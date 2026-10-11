@@ -53,7 +53,7 @@ public partial class MainWindow
             if (Services.Browser is not IBrowserWindow window || !OwnsLoginRequest(request)) return;
             await window.ShowAsync(page, request.Token);
             if (!OwnsLoginRequest(request)) return;
-            SetStatus("请在助手的 Chrome 中登录 B 站，完成后将自动检查高清画质。");
+            SetStatus("请在助手的浏览器中登录 B 站，完成后将自动检查高清画质。");
             // Bounded monitoring only after an explicit login choice, never on every playback poll.
             for (var attempt = 0; attempt < 90 && OwnsLoginRequest(request); attempt++)
             {
@@ -63,7 +63,7 @@ public partial class MainWindow
                 if (!VideoIdentity.TryParse(state.Url, out var identity)) continue;
                 if (identity != request.Identity) return;
                 if (state.LoggedIn != true) continue;
-                AppLog.Info("Account", "专用 Chrome 登录状态已确认。");
+                AppLog.Info("Account", "专用浏览器登录状态已确认。");
                 await TryHighQualityAsync(request, page, account);
                 return;
             }
@@ -72,7 +72,7 @@ public partial class MainWindow
         catch (Exception ex)
         {
             AppLog.Warn("Account", "登录或高清检查未完成。", ex);
-            if (OwnsLoginRequest(request)) SetStatus("登录或高清检查暂未完成，可以在 Chrome 中手动选择画质。", true);
+            if (OwnsLoginRequest(request)) SetStatus("登录或高清检查暂未完成，可以在浏览器中手动选择画质。", true);
         }
     }
 
@@ -93,7 +93,7 @@ public partial class MainWindow
                 AppLog.Info("Account", $"登录后实际视频解码尺寸：{state.VideoWidth}×{state.VideoHeight}。");
                 SetStatus(state.VideoHeight >= 1080
                     ? $"已登录，实际视频画质 {state.VideoWidth}×{state.VideoHeight}。"
-                    : $"已登录，当前画质 {state.VideoWidth}×{state.VideoHeight}，可在 Chrome 中手动选择高清。");
+                    : $"已登录，当前画质 {state.VideoWidth}×{state.VideoHeight}，可在浏览器中手动选择高清。");
                 return;
             }
         }
@@ -101,7 +101,7 @@ public partial class MainWindow
         catch (Exception ex)
         {
             AppLog.Warn("Account", "自动高清请求未完成。", ex);
-            if (OwnsLoginRequest(request)) SetStatus("已登录，可在 Chrome 中手动选择高清画质。");
+            if (OwnsLoginRequest(request)) SetStatus("已登录，可在浏览器中手动选择高清画质。");
         }
     }
 }

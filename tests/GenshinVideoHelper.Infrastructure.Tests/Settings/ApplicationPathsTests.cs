@@ -14,6 +14,7 @@ public sealed class ApplicationPathsTests
         Assert.Equal(Path.Combine(data, "progress.json"), ApplicationPaths.ProgressPath);
         Assert.Equal(Path.Combine(data, "logs"), ApplicationPaths.LogDirectory);
         Assert.Equal(Path.Combine(data, "Chrome"), ApplicationPaths.BrowserProfileDirectory);
+        Assert.Equal(Path.Combine(data, "Edge"), ApplicationPaths.BrowserProfileFor(Core.Models.BrowserKind.Edge));
         Assert.NotEqual(Path.Combine(Directory.GetCurrentDirectory(), "GenshinVideoHelper.settings.json"), ApplicationPaths.SettingsPath);
     }
 

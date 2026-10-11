@@ -39,7 +39,7 @@ internal static class LatencyTests
         using var temporary = TestArtifacts.CreateTemp(root, "background");
         var directory = temporary.Path;
         var otherProfile = Path.Combine(directory, "other-chrome");
-        using var other = new ChromeBrowser(otherProfile);
+        using var other = SmokeBrowser.Create(otherProfile);
         using var cdp = new CdpClient();
         await other.WarmupAsync();
         var lines = await File.ReadAllLinesAsync(Path.Combine(otherProfile, "DevToolsActivePort"));
@@ -50,7 +50,7 @@ internal static class LatencyTests
         using var otherProcess = Process.GetProcessById(await other.GetBrowserProcessIdAsync());
         _ = otherProcess.Handle;
         var profile = Path.Combine(directory, "helper-chrome");
-        var window = new MainWindow(new AppServices(new AppSettings { VideoUrl = Example, SelectedVideoLibraryId = null, HotkeysEnabled = false }, profile, enableWarmup: true))
+        var window = new MainWindow(new AppServices(new AppSettings { BrowserPreference = SmokeBrowser.Preference, VideoUrl = Example, SelectedVideoLibraryId = null, HotkeysEnabled = false }, profile, enableWarmup: true, profileFor: _ => profile))
             { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
         var heartbeat = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(25) };
         var stolen = false;
@@ -68,8 +68,20 @@ internal static class LatencyTests
             await Task.Delay(100);
             NativeInput.GetWindowThreadProcessId(GetForegroundWindow(), out var foregroundPid);
             Console.WriteLine($"Background setup: foreground PID {foregroundPid}, unrelated Chrome {otherProcess.Id}, helper {helperPid}, unrelated HWND {otherProcess.MainWindowHandle}.");
-            Check(foregroundPid == otherProcess.Id, "Independent Chrome is foreground before silent follow");
-            heartbeat.Tick += (_, _) => { NativeInput.GetWindowThreadProcessId(GetForegroundWindow(), out var pid); if (pid == helperPid) stolen = true; };
+            Check(foregroundPid != helperPid && foregroundPid != Environment.ProcessId, "Another application is foreground before silent follow");
+            heartbeat.Tick += (_, _) =>
+            {
+                var foreground = GetForegroundWindow();
+                NativeInput.GetWindowThreadProcessId(foreground, out var pid);
+                if (pid == helperPid && !stolen)
+                {
+                    var title = new System.Text.StringBuilder(256); GetWindowText(foreground, title, title.Capacity);
+                    var windowClass = new System.Text.StringBuilder(256); GetClassName(foreground, windowClass, windowClass.Capacity);
+                    GetWindowRect(foreground, out var rectangle);
+                    Console.WriteLine($"Helper browser activated: HWND {foreground:X}, title={title}, class={windowClass}, visible={IsWindowVisible(foreground)}, rect={rectangle.Left},{rectangle.Top}-{rectangle.Right},{rectangle.Bottom}, phase={window.Services.Follow.Current.Phase}, pip={window.Services.Follow.Current.Video?.PictureInPicture}, nativePip={window.Services.Pip.MouseVisibility.WindowHandle:X}");
+                    stolen = true;
+                }
+            };
             heartbeat.Start();
             var clock = Stopwatch.StartNew();
             ((Button)window.FindName("OpenButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -78,12 +90,15 @@ internal static class LatencyTests
             var helperLines = await File.ReadAllLinesAsync(Path.Combine(profile, "DevToolsActivePort"));
             var helperSocket = new Uri($"ws://127.0.0.1:{helperLines[0]}{helperLines[1]}");
             var bounds = await cdp.SendAsync(helperSocket, "Browser.getWindowForTarget", new { targetId = window.Services.Follow.Current.Page!.Id });
+            Console.WriteLine($"Background {SmokeBrowser.Kind} target window: {bounds}");
             Check(bounds.GetProperty("bounds").GetProperty("windowState").GetString() == "minimized", "Helper Chrome remains minimized while PiP plays");
             await window.Services.Follow.NavigateAsync(4);
             await window.Services.Follow.PollAsync();
             await WaitAsync(() => window.Services.Follow.Current is { Phase: FollowPhase.Following, Request.Identity.Part: 4, Video: { Paused: false, PictureInPicture: true } }, TimeSpan.FromSeconds(45));
             NativeInput.GetWindowThreadProcessId(GetForegroundWindow(), out foregroundPid);
-            Check(!stolen && foregroundPid == otherProcess.Id, "Silent load, native PiP and episode changes preserve other Chrome focus");
+            Console.WriteLine($"Background final focus: PID {foregroundPid}, helper browser {helperPid}, helper UI {Environment.ProcessId}, stolen={stolen}.");
+            Check(!stolen && foregroundPid != helperPid && foregroundPid != Environment.ProcessId,
+                "Silent load, native PiP and episode changes never activate the helper or its browser");
             Console.WriteLine("Background P4, minimized browser and foreground isolation passed.");
             window.Close();
             await window.ShutdownCompletion.WaitAsync(TimeSpan.FromSeconds(4));
@@ -139,7 +154,7 @@ internal static class LatencyTests
     {
         var measurement = new Measurement(name);
         results.Add(measurement);
-        using var browser = new ChromeBrowser(profile);
+        using var browser = SmokeBrowser.Create(profile);
         var measuredBrowser = new MeasuredBrowser(browser, measurement);
         using var episodes = new BilibiliEpisodeService();
         using var player = new VideoController();
@@ -214,7 +229,7 @@ internal static class LatencyTests
     {
         var measurement = new Measurement("prewarm-only-exit");
         results.Add(measurement);
-        var services = new AppServices(new AppSettings { VideoUrl = "", SelectedVideoLibraryId = null, HotkeysEnabled = false }, profile, enableWarmup: true);
+        var services = new AppServices(new AppSettings { BrowserPreference = SmokeBrowser.Preference, VideoUrl = "", SelectedVideoLibraryId = null, HotkeysEnabled = false }, profile, enableWarmup: true, profileFor: _ => profile);
         var window = new MainWindow(services) { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
         try
         {
@@ -227,7 +242,7 @@ internal static class LatencyTests
             Check(process.HasExited, "Exiting without following releases the prewarmed Chrome");
         }
         finally { window.Close(); await window.ShutdownCompletion.WaitAsync(TimeSpan.FromSeconds(10)); measurement.Print(); }
-        using var starting = new ChromeBrowser(profile + "-canceled");
+        using var starting = SmokeBrowser.Create(profile + "-canceled");
         var warming = starting.WarmupAsync();
         await Task.Delay(25);
         var owned = GetField<List<Process>>(starting, "_launchedProcesses")!.Select(p => Process.GetProcessById(p.Id)).ToArray();
@@ -245,7 +260,7 @@ internal static class LatencyTests
     {
         var measurement = new Measurement("idle-exit-with-stale-profile");
         results.Add(measurement);
-        using var browser = new ChromeBrowser(profile);
+        using var browser = SmokeBrowser.Create(profile);
         using var episodes = new BilibiliEpisodeService();
         var window = CreateWindow(profile, new MeasuredBrowser(browser, measurement), episodes, new VideoController(), url: "");
         try
@@ -260,7 +275,7 @@ internal static class LatencyTests
     {
         var measurement = new Measurement("exit-with-noncooperative-preview");
         results.Add(measurement);
-        using var browser = new ChromeBrowser(profile);
+        using var browser = SmokeBrowser.Create(profile);
         var episodes = new DelayedEpisodes();
         var window = CreateWindow(profile, new MeasuredBrowser(browser, measurement), episodes, new VideoController());
         try
@@ -274,7 +289,7 @@ internal static class LatencyTests
     }
 
     private static MainWindow CreateWindow(string profile, IBrowserSession browser, IEpisodeProvider episodes, IVideoPlayer video, string url = Example, bool prewarm = false) =>
-        new(new AppServices(new AppSettings { VideoUrl = url, SelectedVideoLibraryId = null, HotkeysEnabled = false },
+        new(new AppServices(new AppSettings { BrowserPreference = SmokeBrowser.Preference, VideoUrl = url, SelectedVideoLibraryId = null, HotkeysEnabled = false },
             profile, browser: browser, episodes: episodes, video: video, enableWarmup: prewarm))
         { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual };
 
@@ -308,7 +323,7 @@ internal static class LatencyTests
         while (!ready()) { if (timer.Elapsed > timeout) throw new TimeoutException("Latency measurement did not reach its next phase."); await Task.Delay(50); }
     }
 
-    private sealed class MeasuredBrowser(ChromeBrowser inner, Measurement measurement) : IBrowserSession, IBrowserWarmup
+    private sealed class MeasuredBrowser(ChromiumBrowser inner, Measurement measurement) : IBrowserSession, IBrowserWarmup
     {
         public Task WarmupAsync(CancellationToken token = default) => inner.WarmupAsync(token);
         public async Task<BrowserPage> OpenAsync(string url, CancellationToken token = default)
@@ -384,5 +399,6 @@ internal static class LatencyTests
 
     private sealed record TraceEntry(double AtMs, string Step, double? DurationMs);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint window);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(nint window, System.Text.StringBuilder name, int maximum);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(nint window);
 }

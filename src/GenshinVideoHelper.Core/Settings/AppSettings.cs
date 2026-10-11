@@ -2,6 +2,7 @@ namespace GenshinVideoHelper.Core.Settings;
 
 public sealed class AppSettings
 {
+    public Models.BrowserPreference BrowserPreference { get; set; } = Models.BrowserPreference.Auto;
     public Vision.VisionSettings Vision { get; set; } = new();
     public string VideoUrl { get; set; } = "";
     public string? SelectedVideoLibraryId { get; set; } = Library.VideoLibraryCatalog.DefaultLibraryId;
@@ -18,6 +19,7 @@ public sealed class AppSettings
     public void Normalize()
     {
         (Vision ??= new()).Normalize();
+        if (!Enum.IsDefined(BrowserPreference)) BrowserPreference = Models.BrowserPreference.Auto;
         ProgressCompletionPercent = Math.Clamp(ProgressCompletionPercent, 50, 100);
         if (!Enum.IsDefined(LogLevel)) LogLevel = Diagnostics.LogLevel.Info;
         SeekSeconds = Math.Clamp(SeekSeconds, 1, 60);

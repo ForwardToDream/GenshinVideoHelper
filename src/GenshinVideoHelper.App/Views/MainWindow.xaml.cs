@@ -53,7 +53,7 @@ public partial class MainWindow : Window
         Resources["ProgressLookup"] = _progressLookup = new(services.Progress, () => _selectedInfo?.Bvid);
         InitializeComponent();
         UrlInput.Text = _settings.VideoUrl;
-        ConfigPathText.Text = "数据目录：exe 同目录的 .gvh（config.json、progress.json、logs、Chrome）";
+        ConfigPathText.Text = "数据目录：exe 同目录的 .gvh（配置、进度、日志和浏览器登录状态）";
         if (Services.LoadWarning is not null) SetStatus(Services.LoadWarning, true);
         PipWidthSlider.Value = _settings.PipWidth;
         PipWidthLabel.Text = $"{_settings.PipWidth} px";
@@ -80,6 +80,7 @@ public partial class MainWindow : Window
         Services.Preview.Changed += DisplayPreview;
         InitializeProgress();
         InitializeVision();
+        InitializeBrowsers();
         InitializeLibraries();
         _ready = true;
         _previewDebounce.Tick += async (_, _) => await LoadSelectedEpisodesAsync();
@@ -100,7 +101,7 @@ public partial class MainWindow : Window
         ProgressPage.Visibility = key == "Progress" ? Visibility.Visible : Visibility.Collapsed;
         VisionPage.Visibility = key == "Vision" ? Visibility.Visible : Visibility.Collapsed;
         PageHeading.Text = key switch { "Vision" => "地图识别", "Settings" => "设置", "Hotkeys" => "快捷键", "Progress" => "进度", _ => "启动" };
-        PageDescription.Text = key switch { "Vision" => "在游戏小地图上标记指导视频的位置与可信视线。", "Settings" => "调整播放节奏与浮窗。", "Hotkeys" => "查看控制说明，修改游戏中使用的组合键。", "Progress" => "每张地图跟到了哪里；只统计真正播放过的部分，可手动修正。", _ => "选择攻略，自动播放并进入左下角画中画。" };
+        PageDescription.Text = key switch { "Vision" => "在游戏小地图上标记指导视频的位置与可信视线。", "Settings" => "选择浏览器，调整播放节奏与浮窗。", "Hotkeys" => "查看控制说明，修改游戏中使用的组合键。", "Progress" => "每张地图跟到了哪里；只统计真正播放过的部分，可手动修正。", _ => "选择攻略，自动播放并进入左下角画中画。" };
         if (key == "Progress") ShowProgressPage();
     }
 
@@ -440,6 +441,7 @@ public partial class MainWindow : Window
 
         if (Services.VideoActivity is { } activity) activity.MediaActivity -= OnMediaActivity;
         if (Services.VideoActivity is IVideoFrameInvalidationSource source) source.VideoFrameInvalidated -= OnVideoFrameInvalidated;
+        if (Services.Browser is Infrastructure.Browser.BrowserSessionManager manager) manager.ActiveBrowserChanged -= OnActiveBrowserChanged;
         DisposeProgress();
         _mapOverlay?.Dispose();
         Services.Dispose();

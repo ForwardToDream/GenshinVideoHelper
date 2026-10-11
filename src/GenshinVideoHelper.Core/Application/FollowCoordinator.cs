@@ -55,7 +55,7 @@ public sealed class FollowCoordinator : IDisposable
             var page = await _browser.OpenAsync(identity.Url, request.Token);
             EnsureCurrent(request);
             request = Session.Attach(request, page.Id);
-            Publish(Current with { Page = page, Phase = FollowPhase.WaitingForMedia, Message = "Chrome 已打开，正在等待视频。需要登录时请在 Chrome 中完成。" });
+            Publish(Current with { Page = page, Phase = FollowPhase.WaitingForMedia, Message = "浏览器已打开，正在等待视频。需要登录时请在浏览器中完成。" });
             StartMetadata(request, page with { Url = identity.Url });
         }, () => request);
     }
@@ -310,7 +310,7 @@ public sealed class FollowCoordinator : IDisposable
                 Publish(Current with { Phase = FollowPhase.Failed, CanRetry = request is not null, Message = ex.Message, IsError = true });
                 return;
             }
-            var message = ex is VideoNotReadyException or IOException or TimeoutException ? "正在等待视频就绪。需要登录时，请在 Chrome 中完成后等待。" : ex.Message;
+            var message = ex is VideoNotReadyException or IOException or TimeoutException ? "正在等待视频就绪。需要登录时，请在浏览器中完成后等待。" : ex.Message;
             var phase = ex is VideoNotReadyException ? FollowPhase.WaitingForMedia : FollowPhase.Failed;
             if (ex is InvalidOperationException && ex is not VideoNotReadyException) Session.Suppress();
             if (_lastQuietError != message || Current.Phase != phase)

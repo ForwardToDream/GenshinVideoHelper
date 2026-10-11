@@ -36,6 +36,7 @@ public sealed class AppServices : IDisposable
     public string? LoadWarning { get; }
     public VideoLibraryCatalog Libraries { get; }
     public IBrowserSession Browser { get; }
+    public IBrowserCatalog BrowserCatalog { get; }
     public FollowCoordinator Follow { get; }
     public EpisodePreviewService Preview { get; }
     public WindowsPipController Pip { get; }
@@ -54,19 +55,27 @@ public sealed class AppServices : IDisposable
     public AppServices(AppSettings settings, string browserProfile, ISettingsStore? store = null,
         VideoLibraryCatalog? libraries = null, IEpisodeProvider? episodes = null,
         IBrowserSession? browser = null, IVideoPlayer? video = null, string? loadWarning = null, Func<IEpisodeProvider>? episodeFactory = null, bool enableWarmup = false,
-        IProgressStore? progressStore = null)
+        IProgressStore? progressStore = null, IBrowserCatalog? browserCatalog = null, Func<BrowserKind, string>? profileFor = null)
     {
         _enableWarmup = enableWarmup;
         Settings = settings; SettingsStore = store;
         Progress = new(progressStore, settings.ProgressCompletionPercent / 100d);
         LoadWarning = loadWarning is null || Progress.LoadWarning is null ? loadWarning ?? Progress.LoadWarning : $"{loadWarning} {Progress.LoadWarning}";
         Libraries = libraries ?? VideoLibraryLoader.LoadBuiltIn();
-        if (browser is null) { var concrete = new ChromeBrowser(browserProfile); Browser = concrete; _ownedBrowser = concrete; }
+        BrowserCatalog = browserCatalog ?? new BrowserCatalog();
+        if (browser is null)
+        {
+            profileFor ??= kind => kind == BrowserKind.Chrome ? browserProfile : Path.Combine(Path.GetDirectoryName(browserProfile)!, "Edge");
+            var concrete = new BrowserSessionManager(settings, BrowserCatalog, installation => new ChromiumBrowser(installation, profileFor(installation.Kind)));
+            Browser = concrete; _ownedBrowser = concrete;
+        }
         else Browser = browser;
         if (episodes is not null && episodeFactory is not null) throw new ArgumentException("Specify an episode service or a factory, not both.");
         if (episodes is null) { episodes = episodeFactory?.Invoke() ?? new BilibiliEpisodeService(); _ownedEpisodes = episodes as IDisposable; }
         _episodes = episodes;
         Pip = new(settings, store);
+        if (Browser is BrowserSessionManager manager)
+            manager.SessionChanging += () => { Vision?.Configure(null); Pip.MouseVisibility.CloseCurrent(); };
         Preview = new(episodes, _cache);
         // A previewed video is known before it is ever followed, so its parts can be shown and pre-marked.
         Preview.Changed += preview => { if (preview.Info is { } info) Progress.Describe(info); };
@@ -95,8 +104,8 @@ public sealed class AppServices : IDisposable
     private async Task WarmupCoreAsync(IBrowserWarmup warmup)
     {
         try { await warmup.WarmupAsync(_lifetime.Token); }
-        catch (OperationCanceledException) { AppLog.Info("App", "Chrome 预热已取消。"); }
-        catch (Exception ex) { AppLog.Warn("App", "Chrome 预热失败，将在开始跟随时重试。", ex); }
+        catch (OperationCanceledException) { AppLog.Info("App", "浏览器预热已取消。"); }
+        catch (Exception ex) { AppLog.Warn("App", "浏览器预热失败，将在开始跟随时重试。", ex); }
     }
     public Task CloseAsync()
     {

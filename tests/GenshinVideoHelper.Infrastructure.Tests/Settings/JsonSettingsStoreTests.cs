@@ -1,4 +1,5 @@
 using GenshinVideoHelper.Core.Settings;
+using GenshinVideoHelper.Core.Models;
 using GenshinVideoHelper.Infrastructure.Settings;
 using Xunit;
 
@@ -18,6 +19,7 @@ public sealed class JsonSettingsStoreTests : IDisposable
         Assert.Equal("", loaded.Settings.VideoUrl);
         Assert.Equal(9, loaded.Settings.Hotkeys.Count);
         Assert.Null(loaded.Settings.PipPlacement);
+        Assert.Equal(BrowserPreference.Auto, loaded.Settings.BrowserPreference);
         Assert.DoesNotContain("DefaultVideoUrl", File.ReadAllText(PathFor()));
     }
 
@@ -68,6 +70,27 @@ public sealed class JsonSettingsStoreTests : IDisposable
         Directory.CreateDirectory(_folder);
         File.WriteAllText(PathFor(), "{\"VideoUrl\":null}");
         Assert.Equal("", new JsonSettingsStore(PathFor()).Load().Settings.VideoUrl);
+    }
+
+    [Theory]
+    [InlineData(BrowserPreference.Auto)] [InlineData(BrowserPreference.Chrome)] [InlineData(BrowserPreference.Edge)]
+    public void BrowserChoice_RoundTripsAsReadableEnum(BrowserPreference preference)
+    {
+        var store = new JsonSettingsStore(PathFor());
+        var settings = store.Load().Settings;
+        settings.BrowserPreference = preference;
+        store.Save(settings);
+        Assert.Contains($"\"BrowserPreference\": \"{preference}\"", File.ReadAllText(PathFor()));
+        Assert.Equal(preference, store.Load().Settings.BrowserPreference);
+    }
+
+    [Theory]
+    [InlineData("{}")] [InlineData("{\"BrowserPreference\":99}")]
+    public void MissingOrInvalidNumericBrowserChoice_UsesAuto(string json)
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(PathFor(), json);
+        Assert.Equal(BrowserPreference.Auto, new JsonSettingsStore(PathFor()).Load().Settings.BrowserPreference);
     }
 
 

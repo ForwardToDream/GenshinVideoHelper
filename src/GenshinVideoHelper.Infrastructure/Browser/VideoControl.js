@@ -18,7 +18,7 @@
     case 'ensurePip':
       if (document.pictureInPictureElement !== video) {
         if (!document.pictureInPictureEnabled || !video.requestPictureInPicture)
-          throw new Error('浏览器当前不支持画中画，请使用桌面版 Chrome。');
+          throw new Error('浏览器当前不支持画中画，请使用桌面版 Chrome 或 Edge。');
         video.disablePictureInPicture = false;
         await video.requestPictureInPicture();
       }
@@ -43,7 +43,7 @@
         await document.exitPictureInPicture();
       } else {
         if (!document.pictureInPictureEnabled || !video.requestPictureInPicture)
-          throw new Error('浏览器当前不支持画中画，请使用桌面版 Chrome。');
+          throw new Error('浏览器当前不支持画中画，请使用桌面版 Chrome 或 Edge。');
         video.disablePictureInPicture = false;
         await video.requestPictureInPicture();
       }

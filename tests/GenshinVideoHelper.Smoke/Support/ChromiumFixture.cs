@@ -24,17 +24,17 @@ using GenshinVideoHelper.Core.Library;
 
 namespace GenshinVideoHelper.Smoke;
 
-internal sealed class ChromeFixture : IAsyncDisposable
+internal sealed class ChromiumFixture : IAsyncDisposable
     {
         private readonly Process _process;
         private readonly TestArtifacts.TempDirectory _directory;
         public BrowserPage Page { get; }
         public Uri BrowserSocket { get; }
         public string ProfileDirectory { get; }
-        private ChromeFixture(Process process, TestArtifacts.TempDirectory directory, BrowserPage page, Uri browserSocket, string profileDirectory)
+        private ChromiumFixture(Process process, TestArtifacts.TempDirectory directory, BrowserPage page, Uri browserSocket, string profileDirectory)
         { _process = process; _directory = directory; Page = page; BrowserSocket = browserSocket; ProfileDirectory = profileDirectory; }
 
-        public static async Task<ChromeFixture> StartAsync(string root, bool headed)
+        public static async Task<ChromiumFixture> StartAsync(string root, bool headed)
         {
             var directory = TestArtifacts.CreateTemp(root, "browser-test");
             var testDirectory = directory.Path;
@@ -47,7 +47,7 @@ internal sealed class ChromeFixture : IAsyncDisposable
                 <video muted width="100" height="56" src="{new Uri(media).AbsoluteUri}"></video>
                 </body></html>
                 """);
-            var start = new ProcessStartInfo(@"C:\Program Files\Google\Chrome\Application\chrome.exe")
+            var start = new ProcessStartInfo(SmokeBrowser.Installation.ExecutablePath)
             { UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden };
             start.ArgumentList.Add("--user-data-dir=" + Path.Combine(testDirectory, "profile"));
             start.ArgumentList.Add("--remote-debugging-port=0");
@@ -72,14 +72,14 @@ internal sealed class ChromeFixture : IAsyncDisposable
                         var page = pages.RootElement.EnumerateArray().FirstOrDefault(item =>
                             item.GetProperty("type").GetString() == "page" && item.GetProperty("url").GetString()!.Contains("fixture.html"));
                         if (page.ValueKind != JsonValueKind.Object) continue;
-                        return new ChromeFixture(process, directory, new BrowserPage(page.GetProperty("id").GetString()!,
+                        return new ChromiumFixture(process, directory, new BrowserPage(page.GetProperty("id").GetString()!,
                             page.GetProperty("title").GetString()!, page.GetProperty("url").GetString()!,
                             page.GetProperty("webSocketDebuggerUrl").GetString()!),
                             new Uri(version.RootElement.GetProperty("webSocketDebuggerUrl").GetString()!), Path.Combine(testDirectory, "profile"));
                     }
                     catch (Exception ex) when (ex is IOException or HttpRequestException or JsonException or TaskCanceledException) { }
                 }
-                throw new TimeoutException("Test Chrome did not start.");
+                throw new TimeoutException($"Test {SmokeBrowser.Kind} did not start.");
             }
             catch { if (!process.HasExited) process.Kill(entireProcessTree: true); process.Dispose(); directory.Dispose(); throw; }
         }

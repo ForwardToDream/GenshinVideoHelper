@@ -97,7 +97,7 @@ internal static class VisionTests
         byte[] media=await File.ReadAllBytesAsync(Path.Combine(root,"artifacts","test-media","sample.mp4"));
         int serverStopping=0;
         var serve=Task.Run(async()=>{try{while(server.IsListening){var request=await server.GetContextAsync();bool mp4=request.Request.RawUrl!.Contains(".mp4");byte[] body=mp4?media:System.Text.Encoding.UTF8.GetBytes("<video muted autoplay style='width:320px' src='/sample.mp4'></video>");request.Response.ContentType=mp4?"video/mp4":"text/html";request.Response.ContentLength64=body.Length;await request.Response.OutputStream.WriteAsync(body);request.Response.Close();}}catch(Exception)when(Volatile.Read(ref serverStopping)!=0||!server.IsListening){}});
-        await using var browser=await ChromeFixture.StartAsync(root,headed:true);
+        await using var browser=await ChromiumFixture.StartAsync(root,headed:true);
         using var client=new CdpClient(reuseConnections:true);
         var endpoint=new Uri(browser.Page.WebSocketDebuggerUrl);
         await client.SendAsync(endpoint,"Page.navigate",new{url=$"http://127.0.0.1:{port}/video/BV1hjgG6jEa6/"});

@@ -113,6 +113,12 @@ public sealed class PipMouseVisibilityService : IDisposable
 
     public void Suspend() => StopTracking(closeVideo: false);
 
+    public void CloseCurrent()
+    {
+        FlushPlacement();
+        StopTracking(closeVideo: true);
+    }
+
     private void StopTracking(bool closeVideo)
     {
         _timer.Stop();

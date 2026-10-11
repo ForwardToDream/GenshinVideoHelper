@@ -85,7 +85,7 @@ internal static class PipTests
                     await BilibiliTestAsync(root, headed: true, helperWindow: handle);
                     return;
                 }
-                await using var session = await ChromeFixture.StartAsync(root, headed: true);
+                await using var session = await ChromiumFixture.StartAsync(root, headed: true);
                 var controller = new VideoController();
                 VideoState? state = null;
                 for (var i = 0; i < 80; i++)
@@ -142,7 +142,7 @@ internal static class PipTests
     public static bool HasTransparentAppearance(nint window) =>
         (GetWindowLong(window, -20) & 0x00000020) != 0 &&
         GetLayeredWindowAttributes(window, out _, out var alpha, out var flags) && alpha == 0 && (flags & 2) != 0;
-    public static async Task TestMouseVisibilityAsync(ChromeFixture session, int pid, nint helper, VideoController controller, HotkeyService hotkeys, string root)
+    public static async Task TestMouseVisibilityAsync(ChromiumFixture session, int pid, nint helper, VideoController controller, HotkeyService hotkeys, string root)
     {
         Check(GetCursorPos(out var originalCursor), "Read original cursor position");
         using var visibility = new PipMouseVisibilityService(pollAutomatically: false);
@@ -396,7 +396,7 @@ internal static class PipTests
         await Task.Delay(80);
     }
 
-    private static async Task TestPlacementPersistenceAsync(ChromeFixture session, int pid, nint helper, VideoController video, string root)
+    private static async Task TestPlacementPersistenceAsync(ChromiumFixture session, int pid, nint helper, VideoController video, string root)
     {
         Check(GetCursorPos(out var originalCursor), "Read cursor before layout tests");
         using var directory = TestArtifacts.CreateTemp(root, "pip-layout");

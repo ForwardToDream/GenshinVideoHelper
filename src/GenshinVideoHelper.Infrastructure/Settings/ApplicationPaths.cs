@@ -7,5 +7,6 @@ public static class ApplicationPaths
     public static string SettingsPath => Path.Combine(DataDirectory, "config.json");
     public static string ProgressPath => Path.Combine(DataDirectory, "progress.json");
     public static string LogDirectory => Path.Combine(DataDirectory, "logs");
-    public static string BrowserProfileDirectory => Path.Combine(DataDirectory, "Chrome");
+    public static string BrowserProfileDirectory => BrowserProfileFor(Core.Models.BrowserKind.Chrome);
+    public static string BrowserProfileFor(Core.Models.BrowserKind kind) => Path.Combine(DataDirectory, kind.ToString());
 }

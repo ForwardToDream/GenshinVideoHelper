@@ -81,8 +81,8 @@ internal static class ProgressTests
     }
 
     private static MainWindow Create(string profile, string file, int part) =>
-        new(new AppServices(new AppSettings { VideoUrl = new VideoIdentity(Bvid, part).Url, SelectedVideoLibraryId = null, HotkeysEnabled = false },
-            profile, progressStore: new JsonProgressStore(file)))
+        new(new AppServices(new AppSettings { BrowserPreference = SmokeBrowser.Preference, VideoUrl = new VideoIdentity(Bvid, part).Url, SelectedVideoLibraryId = null, HotkeysEnabled = false },
+            profile, progressStore: new JsonProgressStore(file), profileFor: _ => profile))
         { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual };
 
     private static async Task FollowAsync(MainWindow window)

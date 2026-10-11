@@ -9,8 +9,10 @@ internal static class Program
         try
         {
             var root = args.Length > 1 ? Path.GetFullPath(args[1]) : Directory.GetCurrentDirectory();
+            SmokeBrowser.Kind = args.Contains("--edge") ? Core.Models.BrowserKind.Edge : Core.Models.BrowserKind.Chrome;
             TestArtifacts.SweepStale(root);
-            if (args.Contains("--vision-browser")) VisionTests.RunBrowser(root);
+            if (args.Contains("--browser-switch")) BrowserSwitchTests.Run(root);
+            else if (args.Contains("--vision-browser")) VisionTests.RunBrowser(root);
             else if (args.Contains("--vision")) VisionTests.Run(root);
             else if (args.Contains("--login")) LoginTests.Run(root);
             else if (args.Contains("--render-ui")) RenderUi(root);

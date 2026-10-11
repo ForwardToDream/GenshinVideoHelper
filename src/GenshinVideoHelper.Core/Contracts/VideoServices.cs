@@ -3,6 +3,11 @@ using GenshinVideoHelper.Core.Settings;
 
 namespace GenshinVideoHelper.Core.Contracts;
 
+public interface IBrowserCatalog
+{
+    IReadOnlyList<BrowserInstallation> Detect();
+}
+
 public interface IBrowserSession
 {
     Task<BrowserPage> OpenAsync(string videoUrl, CancellationToken token = default);
