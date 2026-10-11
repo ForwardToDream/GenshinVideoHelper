@@ -38,6 +38,6 @@ dotnet build GenshinVideoHelper.sln -c Release
 .\scripts\publish.ps1
 ```
 
-发布目录：`artifacts/GenshinVideoHelper`；分发包：`artifacts/GenshinVideoHelper-win-x64.zip`（不含用户数据）。专项测试参数：`-Preview -Browser -Pip -Follow -Lifecycle -RenderUi -Progress -Latency -Background -Login -Vision`；本地浏览器专项需要 FFmpeg。`-Progress` 用真实视频验证进度记录与续播，需要 Chrome 和联网。测试临时目录在 `artifacts/test-run`，结束时自动删除。`-Latency` 需要 Chrome 和联网， 单独记录启动、画中画与退出各阶段耗时至 `artifacts/latency`（保留最近 10 次），超出体验阈值时提示警告。
+发布目录：`artifacts/GenshinVideoHelper`；分发包：`artifacts/GenshinVideoHelper-win-x64.zip`（不含用户数据）。专项测试参数：`-Preview -Browser -Pip -Follow -Lifecycle -RenderUi -Progress -Latency -Background -Login -Vision -VisionAlgorithms`；本地浏览器专项需要 FFmpeg。`-Progress` 用真实视频验证进度记录与续播，需要 Chrome 和联网。离线视觉回归用 `-VisionAlgorithms`，样本在 `tests/Fixtures/Minimap`（图片为本地数据，索引与期望结果纳入 Git）。测试临时目录在 `artifacts/test-run`，结束时自动删除。`-Latency` 需要 Chrome 和联网， 单独记录启动、画中画与退出各阶段耗时至 `artifacts/latency`（保留最近 10 次），超出体验阈值时提示警告。
 
 参考：[PCL](https://github.com/Meloong-Git/PCL)（龙腾猫跃，视觉） · [BGI](https://github.com/babalae/better-genshin-impact)（babalae，技术与组织）。

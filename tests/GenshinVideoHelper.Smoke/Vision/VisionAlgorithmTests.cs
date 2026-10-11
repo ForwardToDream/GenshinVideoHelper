@@ -13,25 +13,25 @@ internal static class VisionAlgorithmTests
     private static JsonDocument Read(string path) => JsonDocument.Parse(File.ReadAllText(path));
     public static void Run(string root)
     {
-        string exp=Path.Combine(root,"experiments","minimap-disk-v2");
+        string fixtures=Path.Combine(root,"tests","Fixtures","Minimap");
         using var analyzer=new MinimapAnalyzer();
-        using var cases=Read(Path.Combine(exp,"data/user/cases.json"));
-        using var userReference=Read(Path.Combine(exp,"results/user/detections.json"));
-        using var guideIndex=Read(Path.Combine(exp,"data/guide/frames.json"));
-        using var guideReference=Read(Path.Combine(exp,"results/guide/detections.json"));
+        using var cases=Read(Path.Combine(fixtures,"indexes/user-cases.json"));
+        using var userReference=Read(Path.Combine(fixtures,"expected/user-disks.json"));
+        using var guideIndex=Read(Path.Combine(fixtures,"indexes/guide-frames.json"));
+        using var guideReference=Read(Path.Combine(fixtures,"expected/guide-disks.json"));
         var userRows=userReference.RootElement.EnumerateArray().ToDictionary(r=>r.GetProperty("id").GetString()!);
         var guideRows=guideReference.RootElement.EnumerateArray().ToDictionary(r=>r.GetProperty("frame").GetInt32());
         int circleCases=0,found=0;double centerError=0,radiusError=0;
         foreach(var entry in cases.RootElement.EnumerateArray())
         {
-            using var image=Cv2.ImRead(Path.Combine(exp,entry.GetProperty("file").GetString()!));
+            using var image=Cv2.ImRead(Path.Combine(fixtures,entry.GetProperty("file").GetString()!));
             using var frame=Frame(image,3840,2160);
             Compare(GuideDiskDetector.Detect(image,frame),userRows[entry.GetProperty("id").GetString()!]);
         }
         var guideSamples=guideIndex.RootElement.GetProperty("samples").EnumerateArray().ToArray();
         foreach(var entry in guideSamples)
         {
-            using var image=Cv2.ImRead(Path.Combine(exp,entry.GetProperty("file").GetString()!));
+            using var image=Cv2.ImRead(Path.Combine(fixtures,entry.GetProperty("file").GetString()!));
             using var frame=Frame(image,1920,1080);
             Compare(GuideDiskDetector.Detect(image,frame),guideRows[entry.GetProperty("frame").GetInt32()]);
         }
@@ -46,13 +46,13 @@ internal static class VisionAlgorithmTests
             centerError=Math.Max(centerError,ce);radiusError=Math.Max(radiusError,re);
             Check(ce<.1&&re<=2.1,$"Arrow-first geometry parity: case {circleCases}, centre {ce}, radius {re}");
         }
-        using var sequence=Read(Path.Combine(exp,"data/user/sequence.json"));
+        using var sequence=Read(Path.Combine(fixtures,"indexes/user-sequence.json"));
         var samples=sequence.RootElement.GetProperty("samples").EnumerateArray().ToArray();
         int userPairs=0,userAccepted=0;var timings=new List<double>();
         foreach(int offset in new[]{5,20,50,100,180})for(int i=0;i<samples.Length-offset;i+=5)
         {
-            using var a=Cv2.ImRead(Path.Combine(exp,samples[i].GetProperty("file").GetString()!));
-            using var b=Cv2.ImRead(Path.Combine(exp,samples[i+offset].GetProperty("file").GetString()!));
+            using var a=Cv2.ImRead(Path.Combine(fixtures,samples[i].GetProperty("file").GetString()!));
+            using var b=Cv2.ImRead(Path.Combine(fixtures,samples[i+offset].GetProperty("file").GetString()!));
             using var guide=Frame(a,3840,2160);
             var region=MinimapGeometry.GameCaptureRegion(3840,2160);
             using var crop=new Mat(b,new Rect(region.X,region.Y,region.Width,region.Height));
@@ -66,8 +66,8 @@ internal static class VisionAlgorithmTests
         var first=guideRows[0].GetProperty("disk");var fixedGuide=new MapDisk(first.GetProperty("x").GetDouble(),first.GetProperty("y").GetDouble(),first.GetProperty("radius").GetDouble());
         foreach(int offset in new[]{1,5,10})for(int i=0;i<selected.Length-offset;i++)
         {
-            using var a=Cv2.ImRead(Path.Combine(exp,selected[i].GetProperty("file").GetString()!));
-            using var b=Cv2.ImRead(Path.Combine(exp,selected[i+offset].GetProperty("file").GetString()!));
+            using var a=Cv2.ImRead(Path.Combine(fixtures,selected[i].GetProperty("file").GetString()!));
+            using var b=Cv2.ImRead(Path.Combine(fixtures,selected[i+offset].GetProperty("file").GetString()!));
             using var af=Frame(a,1920,1080);using var bf=Frame(b,1920,1080);
             var disk=GuideDiskDetector.Detect(a,af);Check(disk is not null,"Guide sample disk available");
             using var guide=MinimapImage.Normalize(a,af,disk!.Value);using var user=MinimapImage.Normalize(b,bf,fixedGuide);
@@ -76,7 +76,7 @@ internal static class VisionAlgorithmTests
         int controls=0,accepted=0,negativeMarks=0;double maxPointError=0;
         foreach(int index in new[]{0,30,90,180})
         {
-            using var image=Cv2.ImRead(Path.Combine(exp,samples[index].GetProperty("file").GetString()!));
+            using var image=Cv2.ImRead(Path.Combine(fixtures,samples[index].GetProperty("file").GetString()!));
             using var frame=Frame(image,3840,2160);var disk=GuideDiskDetector.Detect(image,frame)!.Value;
             using var guide=MinimapImage.Normalize(image,frame,disk);
             foreach(var (dx,dy,angle,scale) in new(double,double,double,double)[]{(8,0,0,1),(-12,8,0,1),(25,-18,0,1),(45,30,0,1),(-40,-35,0,1),(15,-10,15,.8),(-18,20,-20,1.2),(0,0,90,1)})

@@ -15,3 +15,6 @@ GenshinVideoHelper.progress.json
 GenshinVideoHelper.progress.json.*
 
 **/.gvh/
+
+# Large local vision images; keep indexes and expected results in Git.
+tests/Fixtures/Minimap/images/
