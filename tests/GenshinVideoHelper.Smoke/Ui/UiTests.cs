@@ -64,8 +64,9 @@ internal static class UiTests
     public static void TestLibraryPicker(string root, VideoLibrary library, VideoLibrary second)
     {
         var preview = new GenshinVideoHelper.App.LibraryPickerWindow(new VideoLibraryCatalog([library], []), library.Id);
-        Capture(preview, root, "ui-library-picker.png", 570, 490);
-        Capture(preview, root, "ui-library-picker-compact.png", 460, 380);
+        Check(preview.Height == 680, "Library picker opens taller by default");
+        Capture(preview, root, "ui-library-picker.png", 570, 680);
+        Capture(preview, root, "ui-library-picker-compact.png", 460, 420);
         preview.Close();
         second = second with { CreatorName = "测试 UP" };
         var catalog = new VideoLibraryCatalog([library, second], []);
@@ -74,22 +75,22 @@ internal static class UiTests
         var results = (ListBox)picker.FindName("LibraryResults");
         var apply = (Button)picker.FindName("UseLibraryButton");
         Check(results.Items.Count == 3 && results.SelectedIndex == 1 && apply.IsEnabled, "Picker shows libraries and selects current ID");
-        Capture(picker, root, "ui-library-picker-multiple.png", 570, 490);
-        Capture(picker, root, "ui-library-picker-multiple-compact.png", 460, 380);
+        Capture(picker, root, "ui-library-picker-multiple.png", 570, 680);
+        Capture(picker, root, "ui-library-picker-multiple-compact.png", 460, 420);
         search.Text = "汉卿";
         Check(results.Items.Count == 1, "Search by UP name");
         search.Text = "测试 up 长标题";
         Check(results.Items.Count == 1 && results.SelectedItem is null, "Case-insensitive multiword search finds matching author and library without committing choice");
         results.SelectedIndex = 0;
-        Capture(picker, root, "ui-library-picker-long.png", 460, 380);
+        Capture(picker, root, "ui-library-picker-long.png", 460, 420);
         search.Text = "沉玉谷";
         Check(results.Items.Count == 1, "Search by map name inside library");
         search.Text = "bv1tt7s6yetr";
         Check(results.Items.Count == 1, "Search by BV ID case-insensitively");
         search.Text = "不存在的库-438625";
         Check(results.Items.Count == 0 && !apply.IsEnabled && ((TextBlock)picker.FindName("EmptyStateText")).Visibility == Visibility.Visible, "No results shows empty state and prevents confirmation");
-        Capture(picker, root, "ui-library-picker-empty.png", 570, 490);
-        Capture(picker, root, "ui-library-picker-empty-compact.png", 460, 380);
+        Capture(picker, root, "ui-library-picker-empty.png", 570, 680);
+        Capture(picker, root, "ui-library-picker-empty-compact.png", 460, 420);
         search.Text = "手动输入";
         Check(results.Items.Count == 1, "Manual mode can be searched");
         results.SelectedIndex = 0;
@@ -104,7 +105,9 @@ internal static class UiTests
             search = (TextBox)builtIn.FindName("SearchInput");
             results = (ListBox)builtIn.FindName("LibraryResults");
             Check(results.Items.Count == 5, "Picker includes four built-in libraries and manual input");
-            Capture(builtIn, root, "ui-library-picker-built-in.png", 570, 490);
+            Capture(builtIn, root, "ui-library-picker-built-in.png", 570, 680);
+            Check(results.ItemContainerGenerator.ContainerFromIndex(1) is ListBoxItem { ActualHeight: < 90 },
+                "Library cards remain compact with readable titles");
             search.Text = "影月月";
             Check(results.Items.Count == 1, "Shadow creator search finds its collection");
             search.Text = "穿山甲";
@@ -115,6 +118,7 @@ internal static class UiTests
             Check(results.Items.Count == 1, "The collection without quests can be selected independently");
         }
         finally { builtIn.Close(); }
+        LibraryPickerScrollTests.Run(root, library);
     }
 
     public static void TestLibraryPickerFlow(GenshinVideoHelper.App.MainWindow window)

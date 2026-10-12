@@ -34,9 +34,16 @@
   <Style x:Key="LibraryPickerList" TargetType="ListBox">
     <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Padding" Value="0" />
     <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" /><Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+    <Setter Property="ScrollViewer.CanContentScroll" Value="True" /><Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+    <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBox">
+      <ScrollViewer x:Name="LibraryScroll" CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}" HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}" VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}" Focusable="False">
+        <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+      </ScrollViewer>
+    </ControlTemplate></Setter.Value></Setter>
   </Style>
   <Style x:Key="LibraryPickerItem" TargetType="ListBoxItem">
-    <Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="14,12" /><Setter Property="Margin" Value="0,0,0,8" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="12,8" /><Setter Property="Margin" Value="0,0,0,6" />
     <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
     <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
       <Border x:Name="RowBorder" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="5" Padding="{TemplateBinding Padding}"><ContentPresenter /></Border>
