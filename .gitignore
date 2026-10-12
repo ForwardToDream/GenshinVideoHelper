@@ -6,7 +6,6 @@ artifacts/
 *.suo
 node_modules/
 reference/
-**/AGENTS.md
 experiments/
 
 GenshinVideoHelper.settings.json

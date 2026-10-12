@@ -19,5 +19,6 @@
     <Resource Include="Resources/AppIcon.png" />
     <ProjectReference Include="../GenshinVideoHelper.Infrastructure/GenshinVideoHelper.Infrastructure.csproj" />
     <Content Include="../../README.md" Link="README.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
