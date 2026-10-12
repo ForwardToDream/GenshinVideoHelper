@@ -1,0 +1,30 @@
+{
+  "Id": "chuanshanjia-no-quests",
+  "Name": "一条龙（无任务版）",
+  "CreatorName": "提瓦特高级特工穿山甲",
+  "CreatorUrl": "https://space.bilibili.com/484281260/",
+  "Description": "以地图收集为主，部分路线穿插少量任务；前置任务以视频说明为准。",
+  "Videos": [
+    { "Number": 1, "Title": "璃月", "Bvid": "BV1td4y1b7Hs" },
+    { "Number": 2, "Title": "渊下宫", "Bvid": "BV1qq4y1k7DM" },
+    { "Number": 3, "Title": "层岩巨渊", "Bvid": "BV19v4y117Pu" },
+    { "Number": 4, "Title": "须弥雨林", "Bvid": "BV1te4y1C7LT" },
+    { "Number": 5, "Title": "须弥沙漠", "Bvid": "BV1YP411n7cS" },
+    { "Number": 6, "Title": "千壑沙地", "Bvid": "BV1Bs4y1t7Y7" },
+    { "Number": 7, "Title": "荒石苍漠、浮罗囿", "Bvid": "BV1GM4y127iQ" },
+    { "Number": 8, "Title": "枫丹首批", "Bvid": "BV1Wu4y1q7sF" },
+    { "Number": 9, "Title": "黎翡区、科学院区", "Bvid": "BV1dV411c7wU" },
+    { "Number": 10, "Title": "莫尔泰区、伊黎耶林区", "Bvid": "BV1pa4y1Q7Ss" },
+    { "Number": 11, "Title": "沉玉谷", "Bvid": "BV1W2421L75a" },
+    { "Number": 12, "Title": "旧日之海", "Bvid": "BV1jC411H7uv" },
+    { "Number": 13, "Title": "历练点版", "Bvid": "BV1NZ421H7cF" },
+    { "Number": 14, "Title": "纳塔首批", "Bvid": "BV1my411H7p6" },
+    { "Number": 15, "Title": "纳塔扩展", "Bvid": "BV1e7UQYAEU1" },
+    { "Number": 16, "Title": "安饶之野、远古圣山", "Bvid": "BV1gNZMYREG8" },
+    { "Number": 17, "Title": "悠悠度假村", "Bvid": "BV1aK8CzAEzy" },
+    { "Number": 18, "Title": "挪德卡莱月之一", "Bvid": "BV11NH6zoEyp" },
+    { "Number": 19, "Title": "挪德卡莱月之四", "Bvid": "BV1tPrpB5EZo" },
+    { "Number": 20, "Title": "蒙德扩展", "Bvid": "BV1xeD7BDEyC" },
+    { "Number": 21, "Title": "至冬", "Bvid": "BV1xKbS6WEuK" }
+  ]
+}

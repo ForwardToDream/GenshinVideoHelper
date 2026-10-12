@@ -7,6 +7,25 @@ using Xunit;
 namespace GenshinVideoHelper.Infrastructure.Tests.Library;
 public sealed class VideoLibraryTests
 {
+    [Theory]
+    [InlineData("yingyueyue-no-quests", "你的影月月", "431073645", 19, "BV1cE4m197fY", "BV1BMgj6MEz4")]
+    [InlineData("chuanshanjia-with-quests", "提瓦特高级特工穿山甲", "484281260", 22, "BV1b84y167Sn", "BV1hjgG6jEa6")]
+    [InlineData("chuanshanjia-no-quests", "提瓦特高级特工穿山甲", "484281260", 21, "BV1td4y1b7Hs", "BV1xKbS6WEuK")]
+    public void LoadBuiltIn_AdditionalLibraries_LoadOfflineWithOrderedFirstPartLinks(
+        string id, string creator, string uid, int count, string first, string last)
+    {
+        var catalog = VideoLibraryLoader.LoadBuiltIn();
+        Assert.Empty(catalog.Errors);
+        var library = Assert.Single(catalog.Libraries, library => library.Id == id);
+        Assert.Equal(creator, library.CreatorName);
+        Assert.Equal($"https://space.bilibili.com/{uid}/", library.CreatorUrl);
+        Assert.Equal(count, library.Videos.Count);
+        Assert.Equal(Enumerable.Range(1, count), library.Videos.Select(video => video.Number));
+        Assert.Equal(first, library.Videos[0].Bvid);
+        Assert.Equal(last, library.Videos[^1].Bvid);
+        Assert.All(library.Videos, video => Assert.Equal(new VideoIdentity(video.Bvid, 1), VideoIdentity.Parse(video.Url)));
+    }
+
     [Fact]
     public void LoadBuiltIn_ValidLibraries_PreservesSuppliedCatalog()
     {

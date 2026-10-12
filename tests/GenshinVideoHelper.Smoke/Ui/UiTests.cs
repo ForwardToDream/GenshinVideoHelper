@@ -44,8 +44,20 @@ internal static class UiTests
         Check(guideSelector.SelectedIndex == -1, "Custom video remains supported without a synthetic item");
         Invoke(window, "SelectLibrary", (object)null!);
         Check(settings.SelectedVideoLibraryId is null && guideSelector.Items.Count == 0 && url.Text == "BV1hjgG6jEa6", "Disabling library keeps manual URL intact");
-        Invoke(window, "SelectLibrary", VideoLibraryLoader.LoadBuiltIn().Libraries.Single());
-        Check(settings.SelectedVideoLibraryId == VideoLibraryCatalog.DefaultLibraryId && guideSelector.Items.Count == 22 && url.Text == VideoLibraryLoader.LoadBuiltIn().Libraries.Single().Videos[0].Url, "Changing library fills first map without navigating playback");
+        var defaultLibrary = VideoLibraryLoader.LoadBuiltIn().Libraries.Single(library => library.Id == VideoLibraryCatalog.DefaultLibraryId);
+        Invoke(window, "SelectLibrary", defaultLibrary);
+        Check(settings.SelectedVideoLibraryId == VideoLibraryCatalog.DefaultLibraryId && guideSelector.Items.Count == 22 && url.Text == defaultLibrary.Videos[0].Url, "Changing library fills first map without navigating playback");
+        foreach (var library in window.Services.Libraries.Libraries)
+        {
+            Invoke(window, "SelectLibrary", library);
+            Check(settings.SelectedVideoLibraryId == library.Id && guideSelector.Items.Count == library.Videos.Count &&
+                guideSelector.SelectedIndex == 0 && url.Text == library.Videos[0].Url,
+                "Each built-in library starts with its first video and updates the map list");
+            guideSelector.SelectedIndex = library.Videos.Count - 1;
+            Check(url.Text == library.Videos[^1].Url && beforeState == GetField<VideoState>(window, "_state") &&
+                request == window.Services.Follow.Session.Current, "Changing built-in library videos preserves playback");
+        }
+        Invoke(window, "SelectLibrary", defaultLibrary);
         url.Text = beforeUrl;
         Check(beforeState == GetField<VideoState>(window, "_state"), "Library changes preserve playback state");
     }
@@ -85,6 +97,24 @@ internal static class UiTests
         Invoke(picker, "ClearSearch_Click", picker, new RoutedEventArgs());
         Check(results.Items.Count == 3 && search.Text == "", "Clear button restores full list");
         picker.Close();
+
+        var builtIn = new GenshinVideoHelper.App.LibraryPickerWindow(VideoLibraryLoader.LoadBuiltIn(), library.Id);
+        try
+        {
+            search = (TextBox)builtIn.FindName("SearchInput");
+            results = (ListBox)builtIn.FindName("LibraryResults");
+            Check(results.Items.Count == 5, "Picker includes four built-in libraries and manual input");
+            Capture(builtIn, root, "ui-library-picker-built-in.png", 570, 490);
+            search.Text = "影月月";
+            Check(results.Items.Count == 1, "Shadow creator search finds its collection");
+            search.Text = "穿山甲";
+            Check(results.Items.Count == 2, "Creator search finds both quest variants");
+            search.Text = "穿山甲 有任务版";
+            Check(results.Items.Count == 1, "Creator and quest variant can be searched together");
+            search.Text = "穿山甲 无任务版";
+            Check(results.Items.Count == 1, "The collection without quests can be selected independently");
+        }
+        finally { builtIn.Close(); }
     }
 
     public static void TestLibraryPickerFlow(GenshinVideoHelper.App.MainWindow window)
@@ -258,7 +288,7 @@ internal static class UiTests
         ((ScrollViewer)hotkeysPage.Children[0]).ScrollToEnd();
         Capture(window, root, "ui-hotkeys-bottom-compact.png", 860, 600);
         window.Close();
-        var library = VideoLibraryLoader.LoadBuiltIn().Libraries.Single();
+        var library = VideoLibraryLoader.LoadBuiltIn().Libraries.Single(library => library.Id == VideoLibraryCatalog.DefaultLibraryId);
         var second = library with { Id = "long-test-library", Name = "仅测试 · " + string.Concat(Enumerable.Repeat("长标题的一条龙地图导航视频库", 5)), Videos = [library.Videos[0] with { Title = string.Concat(Enumerable.Repeat("蒙德、璃月、龙脊雪山 · 长标题", 5)) }] };
         var multipleSettings = new AppSettings { HotkeysEnabled = false, SelectedVideoLibraryId = second.Id };
         var multipleWindow = new GenshinVideoHelper.App.MainWindow(new AppServices(multipleSettings, TestArtifacts.PathFor(root, "ui-test-profile"), libraries: new VideoLibraryCatalog([library, second], []), episodeFactory: PreviewService));

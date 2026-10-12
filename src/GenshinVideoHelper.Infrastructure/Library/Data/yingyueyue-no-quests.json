@@ -1,0 +1,28 @@
+{
+  "Id": "yingyueyue-no-quests",
+  "Name": "一条龙（无任务版）",
+  "CreatorName": "你的影月月",
+  "CreatorUrl": "https://space.bilibili.com/431073645/",
+  "Description": "以地图收集为主，部分路线穿插少量任务；前置任务以视频说明为准。",
+  "Videos": [
+    { "Number": 1, "Title": "蒙德重制", "Bvid": "BV1cE4m197fY" },
+    { "Number": 2, "Title": "龙脊雪山", "Bvid": "BV1BWknYKEgB" },
+    { "Number": 3, "Title": "须弥雨林", "Bvid": "BV1xw4m1v7cf" },
+    { "Number": 4, "Title": "荒石苍漠、浮罗囿", "Bvid": "BV1P24y1A7J4" },
+    { "Number": 5, "Title": "枫丹廷、苍晶区、白露区", "Bvid": "BV1Cm4y1n7VS" },
+    { "Number": 6, "Title": "黎翡区、科学院区", "Bvid": "BV16z4y137cn" },
+    { "Number": 7, "Title": "莫尔泰区、伊黎耶林区", "Bvid": "BV1ww411x7rm" },
+    { "Number": 8, "Title": "沉玉谷", "Bvid": "BV13A4m1j7d8" },
+    { "Number": 9, "Title": "旧日之海", "Bvid": "BV1qH4y1A74y" },
+    { "Number": 10, "Title": "希穆兰卡（限时）", "Bvid": "BV1fH4y1w7f1" },
+    { "Number": 11, "Title": "纳塔首批", "Bvid": "BV14Z421L7DN" },
+    { "Number": 12, "Title": "镜璧山、翘枝崖、奥奇卡纳塔", "Bvid": "BV1P6SNYREo8" },
+    { "Number": 13, "Title": "安饶之野、远古圣山", "Bvid": "BV13zoeYeEuJ" },
+    { "Number": 14, "Title": "悠悠度假村", "Bvid": "BV1AihAz5EsW" },
+    { "Number": 15, "Title": "挪德卡莱月之一", "Bvid": "BV1CMHQzsEJV" },
+    { "Number": 16, "Title": "挪德卡莱月之四", "Bvid": "BV1qprpBcEZN" },
+    { "Number": 17, "Title": "蒙德扩展", "Bvid": "BV1YiDjB8EK9" },
+    { "Number": 18, "Title": "挪德卡莱月之八", "Bvid": "BV1uMTY6aEZv" },
+    { "Number": 19, "Title": "至冬", "Bvid": "BV1BMgj6MEz4" }
+  ]
+}

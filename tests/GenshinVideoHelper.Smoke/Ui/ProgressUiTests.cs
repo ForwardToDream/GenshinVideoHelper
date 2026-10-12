@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using GenshinVideoHelper.App.Controls;
 using GenshinVideoHelper.Core.Models;
+using GenshinVideoHelper.Core.Library;
 using GenshinVideoHelper.Core.Progress;
 using GenshinVideoHelper.Infrastructure.Library;
 
@@ -15,7 +16,7 @@ internal static class ProgressUiTests
     public static void Run(GenshinVideoHelper.App.MainWindow window, string root)
     {
         var progress = window.Services.Progress;
-        var library = VideoLibraryLoader.LoadBuiltIn().Libraries.Single();
+        var library = VideoLibraryLoader.LoadBuiltIn().Libraries.Single(library => library.Id == VideoLibraryCatalog.DefaultLibraryId);
         // Not the first map: the library tests rely on that one having no progress.
         var map = library.Videos[5];
         T Find<T>(string name) where T : class => (T)window.FindName(name);

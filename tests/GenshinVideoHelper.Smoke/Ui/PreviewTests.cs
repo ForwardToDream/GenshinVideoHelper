@@ -39,7 +39,7 @@ internal static class PreviewTests
 
     public static async Task PreviewUiTestAsync(string root)
     {
-        var library = VideoLibraryLoader.LoadBuiltIn().Libraries.Single();
+        var library = VideoLibraryLoader.LoadBuiltIn().Libraries.Single(library => library.Id == VideoLibraryCatalog.DefaultLibraryId);
         var handler = new PreviewHandler();
         var settings = new AppSettings { HotkeysEnabled = false };
         var window = new GenshinVideoHelper.App.MainWindow(new AppServices(settings, TestArtifacts.PathFor(root, "preview-test-profile"), episodeFactory: () => new BilibiliEpisodeService(handler)));
