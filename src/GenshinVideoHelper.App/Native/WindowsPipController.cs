@@ -16,7 +16,7 @@ public sealed class WindowsPipController : IPipController, IDisposable
     {
         _settings = settings;
         _store = store;
-        MouseVisibility = new(getPlacement: () => settings.PipPlacement, placementChanged: RememberPlacement);
+        MouseVisibility = new(getLayout: () => settings.PipLayout, layoutChanged: RememberLayout);
     }
     public Task ObserveAsync(int browserProcessId, bool enabled, CancellationToken token)
     {
@@ -38,15 +38,15 @@ public sealed class WindowsPipController : IPipController, IDisposable
         await PipWindowService.WaitForPipAsync(browserProcessId, token);
         MouseVisibility.TrackBrowser(browserProcessId);
         await PipWindowService.PlaceAsync(browserProcessId, HelperWindow, _settings.PipWidth, _settings.PipMargin, ratio, token,
-            restore ? _settings.PipPlacement : null);
+            restore ? _settings.PipLayout : null);
         MouseVisibility.Refresh();
-        if (!restore && MouseVisibility.Placement is { } placement) RememberPlacement(placement);
+        if (!restore && MouseVisibility.Layout is { } layout) RememberLayout(layout);
     }
 
-    private void RememberPlacement(PipPlacement placement)
+    private void RememberLayout(PipLayout layout)
     {
-        if (_settings.PipPlacement == placement) return;
-        _settings.PipPlacement = placement;
+        if (_settings.PipLayout == layout) return;
+        _settings.PipLayout = layout;
         try { _store?.Save(_settings); }
         catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
         { AppLog.Warn("Settings", "浮窗位置和大小未能保存。", ex); }

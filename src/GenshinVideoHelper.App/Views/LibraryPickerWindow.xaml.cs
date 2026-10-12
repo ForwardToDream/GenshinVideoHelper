@@ -10,6 +10,7 @@ public partial class LibraryPickerWindow : Window
     private readonly Choice[] _choices;
     private readonly string? _currentId;
     public VideoLibrary? SelectedLibrary { get; private set; }
+    public Native.WindowDisplayLayout DisplayLayout { get; }
 
     private sealed record Choice(VideoLibrary? Library)
     {
@@ -32,6 +33,7 @@ public partial class LibraryPickerWindow : Window
         _currentId = currentId;
         _choices = new[] { new Choice(null) }.Concat(catalog.Libraries.Select(library => new Choice(library))).ToArray();
         InitializeComponent();
+        DisplayLayout = new(this);
         Filter();
         if (catalog.Errors.Count > 0) PickerStatusText.Text = "部分视频库未能加载，可使用其他库或手动输入。";
         Loaded += (_, _) => SearchInput.Focus();

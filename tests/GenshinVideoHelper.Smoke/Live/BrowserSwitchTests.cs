@@ -33,7 +33,7 @@ internal static class BrowserSwitchTests
         var store = new JsonSettingsStore(Path.Combine(data, "config.json"));
         var settings = new AppSettings { BrowserPreference = BrowserPreference.Chrome, HotkeysEnabled = false,
             SelectedVideoLibraryId = null, VideoUrl = new VideoIdentity("BV1MXfEY4EQ2", 2).Url,
-            PipPlacement = new(60, 75, 460, 282) };
+            PipLayout = new(.25, 16d / 9, .1, .1) };
         settings.Vision.Enabled = false;
         var services = new AppServices(settings, Path.Combine(data, "Chrome"), store, enableWarmup: true);
         var window = new MainWindow(services) { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
@@ -70,7 +70,7 @@ internal static class BrowserSwitchTests
             await CaptureAsync(window, video, BrowserKind.Edge, 3);
             Check(Directory.Exists(Path.Combine(data, "Chrome")) && Directory.Exists(Path.Combine(data, "Edge")),
                 "Browser profiles remain independent");
-            Check(services.Pip.MouseVisibility.Placement == settings.PipPlacement, "Browser switch restores saved frame geometry");
+            Check(services.Pip.MouseVisibility.Layout == settings.PipLayout, "Browser switch restores saved frame proportions");
             window.Close();
             await window.ShutdownCompletion.WaitAsync(TimeSpan.FromSeconds(4));
             Check(edge.HasExited, "Exit closes the active dedicated Edge");

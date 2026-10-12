@@ -21,6 +21,7 @@ namespace GenshinVideoHelper.App;
 public partial class MainWindow : Window
 {
     public AppServices Services { get; }
+    public WindowDisplayLayout DisplayLayout { get; }
     private readonly AppSettings _settings;
     private readonly VideoLibraryCatalog _libraryCatalog;
     private readonly DispatcherTimer _poll = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -52,11 +53,13 @@ public partial class MainWindow : Window
         // Referenced by the item templates, so it has to exist before the markup is loaded.
         Resources["ProgressLookup"] = _progressLookup = new(services.Progress, () => _selectedInfo?.Bvid);
         InitializeComponent();
+        DisplayLayout = new(this);
+        ((FrameworkElement)Content).SizeChanged += (_, args) => UpdateResponsiveLayout(args.NewSize.Width);
         UrlInput.Text = _settings.VideoUrl;
         ConfigPathText.Text = "数据目录：exe 同目录的 .gvh（配置、进度、日志和浏览器登录状态）";
         if (Services.LoadWarning is not null) SetStatus(Services.LoadWarning, true);
         PipWidthSlider.Value = _settings.PipWidth;
-        PipWidthLabel.Text = $"{_settings.PipWidth} px";
+        PipWidthLabel.Text = $"{_settings.PipWidth / 1920d:P0}";
         var seekItem = SeekSelector.Items.Cast<ComboBoxItem>().FirstOrDefault(item => (string)item.Tag == _settings.SeekSeconds.ToString());
         if (seekItem is null)
         {
@@ -95,6 +98,8 @@ public partial class MainWindow : Window
 
     private void ShowPage(string key)
     {
+        PagesHost.MinWidth = key == "Progress" ? 620 : 480;
+        PageViewport.ScrollToHorizontalOffset(0);
         FollowPage.Visibility = key == "Follow" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPage.Visibility = key == "Settings" ? Visibility.Visible : Visibility.Collapsed;
         HotkeysPage.Visibility = key == "Hotkeys" ? Visibility.Visible : Visibility.Collapsed;
@@ -334,11 +339,30 @@ public partial class MainWindow : Window
     }
     private void UpdatePlaybackPreferenceText(double rate) =>
         PlaybackPreferenceText.Text = $"跳转步长 {_settings.SeekSeconds} 秒 · 播放速度 {rate:0.##}×";
+    private void UpdateResponsiveLayout(double width)
+    {
+        var compact = width < 760;
+        NavigationColumn.Width = new GridLength(compact ? 60 : 160);
+        SidebarTitle.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        HeaderSubtitle.Visibility = width < 900 ? Visibility.Collapsed : Visibility.Visible;
+        HeaderConnectionState.Visibility = width < 700 ? Visibility.Collapsed : Visibility.Visible;
+        foreach (var item in new[] { NavFollow, NavProgress, NavVision, NavHotkeys, NavSettings })
+        {
+            var content = (StackPanel)item.Content;
+            var icon = (TextBlock)content.Children[0];
+            var label = (TextBlock)content.Children[1];
+            item.ToolTip = label.Text;
+            System.Windows.Automation.AutomationProperties.SetName(item, label.Text);
+            label.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+            icon.Margin = new Thickness(0, 0, compact ? 0 : 13, 0);
+        }
+    }
+
     private void PipWidth_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (!_ready) return;
         _settings.PipWidth = (int)PipWidthSlider.Value;
-        PipWidthLabel.Text = $"{_settings.PipWidth} px";
+        PipWidthLabel.Text = $"{_settings.PipWidth / 1920d:P0}";
         SaveSettings();
     }
     private void Hotkeys_Click(object sender, RoutedEventArgs e)

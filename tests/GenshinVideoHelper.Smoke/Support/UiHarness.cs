@@ -38,11 +38,13 @@ internal static class UiHarness
 
     public static void Capture(Window window, string root, string name, int width, int height)
     {
-        window.Width = width;
-        window.Height = height;
         var content = (FrameworkElement)window.Content;
-        content.Measure(new Size(width, height));
-        content.Arrange(new Rect(0, 0, width, height));
+        var scale = content.LayoutTransform.Value.M11;
+        var size = new Size(width * scale, height * scale);
+        window.Width = size.Width;
+        window.Height = size.Height;
+        content.Measure(size);
+        content.Arrange(new Rect(size));
         content.UpdateLayout();
         window.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
         if (window is GenshinVideoHelper.App.MainWindow main && ((ScrollViewer)main.FindName("FollowPage")).Visibility == Visibility.Visible)
@@ -52,7 +54,9 @@ internal static class UiHarness
             var episodes = (ComboBox)main.FindName("EpisodeSelector");
             Check(Math.Abs(start.ActualWidth - url.ActualWidth) < 1 && start.TranslatePoint(new Point(), content).Y >= episodes.TranslatePoint(new Point(0, episodes.ActualHeight), content).Y + 11, "Start spans full card width on its own row beneath episodes");
         }
-        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        var dpi = VisualTreeHelper.GetDpi(content);
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(size.Width * dpi.DpiScaleX),
+            (int)Math.Ceiling(size.Height * dpi.DpiScaleY), dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
         bitmap.Render(content);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
@@ -75,8 +79,14 @@ internal static class UiHarness
         var child = (FrameworkElement)popup.Child;
         child.UpdateLayout();
         Check(child.ActualWidth > 0 && child.ActualWidth <= combo.ActualWidth + 1 && child.ActualHeight <= 300,
-            "Episode dropdown stays within control width and scrolls at 300px");
-        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(child.ActualWidth), (int)Math.Ceiling(child.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+            "Dropdown stays within control width and scrolls at 300 reference units");
+        var first = child.PointToScreen(new Point());
+        var last = child.PointToScreen(new Point(child.ActualWidth, child.ActualHeight));
+        var controlWidth = combo.PointToScreen(new Point(combo.ActualWidth, 0)).X - combo.PointToScreen(new Point()).X;
+        Check(Math.Abs(last.X - first.X - controlWidth) <= 2, "Dropdown physical width matches the control without double scaling");
+        var dpi = VisualTreeHelper.GetDpi(child);
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(last.X - first.X), (int)Math.Ceiling(last.Y - first.Y),
+            dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
         bitmap.Render(child);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));

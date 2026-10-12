@@ -18,15 +18,18 @@ public sealed class SettingsTests
     }
 
     [Theory]
-    [InlineData(0, 0, 0, 400)]
-    [InlineData(0, 0, 640, -1)]
-    [InlineData(0, 0, 40000, 400)]
-    [InlineData(int.MaxValue, 0, 640, 400)]
-    public void Normalize_InvalidPipPlacement_UsesFactoryLayout(int left, int top, int width, int height)
+    [InlineData(0, 1.8, 0, 1)]
+    [InlineData(1.1, 1.8, 0, 1)]
+    [InlineData(.22, 0, 0, 1)]
+    [InlineData(.22, 1.8, -1, 1)]
+    [InlineData(.22, 1.8, 0, 2)]
+    [InlineData(double.NaN, 1.8, 0, 1)]
+    [InlineData(.22, double.PositiveInfinity, 0, 1)]
+    public void Normalize_InvalidPipLayout_UsesFactoryLayout(double width, double aspect, double x, double y)
     {
-        var settings = new AppSettings { PipPlacement = new(left, top, width, height) };
+        var settings = new AppSettings { PipLayout = new(width, aspect, x, y) };
         settings.Normalize();
-        Assert.Null(settings.PipPlacement);
+        Assert.Null(settings.PipLayout);
     }
 
     [Theory]

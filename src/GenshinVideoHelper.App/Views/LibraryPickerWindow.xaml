@@ -9,19 +9,22 @@
  <shell:WindowChrome.WindowChrome><shell:WindowChrome CaptionHeight="42" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="6" UseAeroCaptionButtons="False" /></shell:WindowChrome.WindowChrome>
  <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="6" Background="{StaticResource PageBrush}">
   <Grid>
-   <Grid.RowDefinitions><RowDefinition Height="42" /><RowDefinition Height="Auto" /><RowDefinition /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+   <Grid.RowDefinitions><RowDefinition Height="42" /><RowDefinition /></Grid.RowDefinitions>
    <Border Background="{StaticResource TitleBarBrush}" CornerRadius="5,5,0,0"><DockPanel Margin="18,0,5,0">
     <Button DockPanel.Dock="Right" Style="{StaticResource CaptionButton}" Click="Close_Click" ToolTip="关闭" AutomationProperties.Name="关闭视频库选择" shell:WindowChrome.IsHitTestVisibleInChrome="True"><TextBlock Style="{StaticResource Symbol}" Text="&#xE8BB;" Foreground="White" FontSize="12" /></Button>
     <TextBlock Text="选择视频库" Foreground="White" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
    </DockPanel></Border>
-   <StackPanel Grid.Row="1" Margin="20,18,20,12">
+   <ScrollViewer x:Name="PickerViewport" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+   <Grid MinWidth="330" MinHeight="330" Width="{Binding ViewportWidth, ElementName=PickerViewport}" Height="{Binding ViewportHeight, ElementName=PickerViewport}">
+   <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+   <StackPanel Margin="20,18,20,12">
     <Grid><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
      <TextBox x:Name="SearchInput" Height="36" TextChanged="Search_TextChanged" AutomationProperties.Name="搜索视频库" ToolTip="搜索库名、UP 主、地图或 BV 号" />
      <Button Grid.Column="1" Content="清空" Margin="8,0,0,0" Padding="12,6" Click="ClearSearch_Click" />
     </Grid>
     <TextBlock Text="搜索库名、UP 主或地图名称" Style="{StaticResource SecondaryText}" Margin="0,7,0,0" />
    </StackPanel>
-   <Grid Grid.Row="2" Margin="20,0,20,10">
+   <Grid Grid.Row="1" Margin="20,0,20,10">
     <ListBox x:Name="LibraryResults" Style="{StaticResource LibraryPickerList}" ItemContainerStyle="{StaticResource LibraryPickerItem}" SelectionChanged="LibraryResults_SelectionChanged" AutomationProperties.Name="可选视频库">
      <ListBox.ItemTemplate><DataTemplate><StackPanel>
       <DockPanel>
@@ -34,10 +37,12 @@
     </ListBox>
     <TextBlock x:Name="EmptyStateText" Text="没有找到匹配的库，请换个关键词。" Style="{StaticResource SecondaryText}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" Margin="8" />
    </Grid>
-   <Border Grid.Row="3" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" CornerRadius="0,0,5,5"><StackPanel Margin="20,12,20,15">
+   <Border Grid.Row="2" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" CornerRadius="0,0,5,5"><StackPanel Margin="20,12,20,15">
     <TextBlock x:Name="PickerStatusText" Text="选择库后更新攻略列表，当前视频继续播放。" Style="{StaticResource SecondaryText}" Margin="0,0,0,10" MaxHeight="38" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
     <DockPanel><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="取消" IsCancel="True" Margin="0,0,8,0" /><Button x:Name="UseLibraryButton" Content="使用此库" Style="{StaticResource PrimaryButton}" IsDefault="True" Click="UseLibrary_Click" IsEnabled="False" /></StackPanel><TextBlock x:Name="ResultCountText" Style="{StaticResource SecondaryText}" VerticalAlignment="Center" /></DockPanel>
    </StackPanel></Border>
+   </Grid>
+   </ScrollViewer>
   </Grid>
  </Border>
 </Window>

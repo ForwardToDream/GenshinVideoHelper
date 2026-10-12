@@ -14,42 +14,52 @@ namespace GenshinVideoHelper.App;
 // Chrome supplies the live surface; one application window owns all visible UI and movement.
 public partial class PipFrameWindow : Window
 {
-    public const double HeightDip = 24;
-    public const double BorderDip = 1;
+    public const double ReferenceBarHeight = ScreenLayout.PipBarHeight;
+    public const double ReferenceBorder = ScreenLayout.PipBorder;
     private readonly nint _handle;
+    private readonly WindowDisplayLayout _displayLayout;
     private PipVideoSurface? _video;
     private bool _hidden;
     private bool _applyingPlacement;
-    private PipPlacement? _observedPlacement, _pendingPlacement;
+    private bool _userChanging;
+    private PipPlacement? _observedPlacement;
+    private PipLayout? _layout, _pendingLayout;
     private readonly DispatcherTimer _placementTimer = new(DispatcherPriority.Background)
         { Interval = TimeSpan.FromMilliseconds(150) };
     private PipVisibilityMode? _mode;
     public nint WindowHandle => _handle;
     public nint VideoWindowHandle => _video?.VideoWindow ?? 0;
     public bool IsVideoEmbedded => _video?.IsAttached == true;
-    public event Action<PipPlacement>? PlacementChanged;
-    public PipPlacement? Placement => _video is not null && GetWindowRect(_handle, out var bounds)
-        ? new(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top) : null;
+    public PipLayout? Layout => _layout;
+    public event Action<PipLayout>? LayoutChanged;
+    public PipPlacement? Placement
+    {
+        get
+        {
+            if (_video is null || !GetWindowRect(_handle, out var bounds)) return null;
+            return new(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
+        }
+    }
 
     public PipFrameWindow()
     {
         InitializeComponent();
+        _displayLayout = new(this, resizeWindow: false);
         _handle = new WindowInteropHelper(this).EnsureHandle();
+        _displayLayout.DisplayChanged += DisplayChanged;
         SetWindowLong(_handle, -20, GetWindowLong(_handle, -20) | 0x80 | 0x08000000);
         HwndSource.FromHwnd(_handle)!.AddHook(WindowMessages);
         _placementTimer.Tick += (_, _) => FlushPlacement();
     }
 
-    public void Attach(nint pip, PipPlacement? placement = null)
+    public void Attach(nint pip, PipLayout? layout = null)
     {
         if (VideoWindowHandle == pip) return;
         ReleaseVideo();
         if (!GetWindowRect(pip, out var bounds)) throw new InvalidOperationException("画中画窗口已关闭。");
-        var scale = GetDpiForWindow(_handle) / 96d;
-        var border = (int)Math.Round(BorderDip * scale);
-        var bar = (int)Math.Round(HeightDip * scale);
-        Width = (bounds.Right - bounds.Left) / scale + BorderDip * 2;
-        Height = (bounds.Bottom - bounds.Top) / scale + HeightDip + BorderDip * 2;
+        var display = DisplayMetrics.ForWindow(_handle);
+        var border = ScreenLayout.Pixels(ReferenceBorder, display.Dpi);
+        var bar = ScreenLayout.Pixels(ReferenceBarHeight, display.Dpi);
         ApplyBounds(bounds.Left - border, bounds.Top - bar - border,
             bounds.Right - bounds.Left + border * 2, bounds.Bottom - bounds.Top + bar + border * 2);
         try
@@ -57,42 +67,52 @@ public partial class PipFrameWindow : Window
             _applyingPlacement = true;
             _video = new PipVideoSurface(pip, _handle);
             PipWindowService.RegisterFrame(pip, this);
-            if (placement is { IsValid: true }) RestorePlacement(placement);
+            if (layout is { IsValid: true }) RestoreLayout(layout);
             _hidden = false;
             Show();
             UpdateLayout();
             UpdateVideo();
         }
         catch { ReleaseVideo(); Hide(); throw; }
-        finally { _applyingPlacement = false; _observedPlacement = Placement; }
+        finally { _applyingPlacement = false; _observedPlacement = Placement; _layout ??= CaptureLayout(); }
     }
 
-    public void Place(int left, int bottom, int videoWidth, int videoHeight)
+    public void Place(PipPlacement placement)
     {
-        var scale = GetDpiForWindow(_handle) / 96d;
-        var border = (int)Math.Round(BorderDip * scale);
-        var bar = (int)Math.Round(HeightDip * scale);
-        var width = videoWidth + border * 2;
-        var height = videoHeight + bar + border * 2;
-        ApplyBounds(left, bottom - height, width, height);
+        ApplyBounds(placement.Left, placement.Top, placement.Width, placement.Height);
+        _layout = CaptureLayout();
     }
 
-    public void RestorePlacement(PipPlacement placement)
+    public void RestoreLayout(PipLayout layout)
     {
-        if (!placement.IsValid) return;
-        var bounds = new NativeBounds { Left = placement.Left, Top = placement.Top,
-            Right = placement.Left + placement.Width, Bottom = placement.Top + placement.Height };
-        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
-        if (!GetMonitorInfo(MonitorFromRect(ref bounds, 2), ref info))
-            throw new Win32Exception(Marshal.GetLastWin32Error());
-        var work = info.Work;
-        var scale = Math.Max(96, GetDpiForWindow(_handle)) / 96d;
-        var workWidth = work.Right - work.Left;
-        var workHeight = work.Bottom - work.Top;
-        var width = Math.Clamp(placement.Width, Math.Min(workWidth, (int)Math.Ceiling(MinWidth * scale)), workWidth);
-        var height = Math.Clamp(placement.Height, Math.Min(workHeight, (int)Math.Ceiling(MinHeight * scale)), workHeight);
-        ApplyBounds(Math.Clamp(placement.Left, work.Left, work.Right - width),
-            Math.Clamp(placement.Top, work.Top, work.Bottom - height), width, height);
+        if (!layout.IsValid) return;
+        _layout = layout;
+        RestoreOnDisplay(layout, DisplayMetrics.ForLayout(layout, _handle));
+    }
+
+    private void RestoreOnDisplay(PipLayout layout, DisplayMetrics display)
+    {
+        var restored = ScreenLayout.Restore(layout, display.WorkArea, display.Dpi);
+        ApplyBounds(restored.Left, restored.Top, restored.Width, restored.Height);
+        // Moving the HWND lets WPF adopt the target monitor's actual DPI before final sizing.
+        var actual = DisplayMetrics.ForWindow(_handle);
+        if (actual == display) return;
+        restored = ScreenLayout.Restore(layout, actual.WorkArea, actual.Dpi);
+        ApplyBounds(restored.Left, restored.Top, restored.Width, restored.Height);
+    }
+
+    private void DisplayChanged(DisplayMetrics previous, DisplayMetrics current)
+    {
+        if (_video is null || _applyingPlacement || _layout is not { } layout) return;
+        if (_userChanging && previous.DeviceName != current.DeviceName && GetWindowRect(_handle, out var bounds))
+        {
+            var resized = ScreenLayout.Restore(layout, current.WorkArea, current.Dpi);
+            // A drag onto another display keeps the pointer's new position, while resizing proportionally.
+            resized = resized with { Left = Math.Clamp(bounds.Left, current.WorkArea.Left, current.WorkArea.Right - resized.Width),
+                Top = Math.Clamp(bounds.Top, current.WorkArea.Top, current.WorkArea.Bottom - resized.Height) };
+            ApplyBounds(resized.Left, resized.Top, resized.Width, resized.Height);
+        }
+        else RestoreOnDisplay(layout, current);
     }
 
     private void ApplyBounds(int left, int top, int width, int height)
@@ -104,6 +124,10 @@ public partial class PipFrameWindow : Window
         {
             if (!SetWindowPos(_handle, new nint(-1), left, top, width, height, 0x0010))
                 throw new Win32Exception(Marshal.GetLastWin32Error());
+            _displayLayout.Refresh();
+            var dpiScale = DisplayMetrics.ForWindow(_handle).DpiScale;
+            Width = width / dpiScale;
+            Height = height / dpiScale;
             UpdateLayout();
             UpdateVideo();
         }
@@ -112,8 +136,10 @@ public partial class PipFrameWindow : Window
 
     private void ObservePlacement()
     {
-        if (_applyingPlacement || Placement is not { IsValid: true } placement || placement == _observedPlacement) return;
-        _observedPlacement = _pendingPlacement = placement;
+        if (!_userChanging || _applyingPlacement || _displayLayout.IsApplying ||
+            Placement is not { IsValid: true } placement || placement == _observedPlacement) return;
+        _observedPlacement = placement;
+        _layout = _pendingLayout = CaptureLayout();
         _placementTimer.Stop();
         _placementTimer.Start();
     }
@@ -121,9 +147,16 @@ public partial class PipFrameWindow : Window
     public void FlushPlacement()
     {
         _placementTimer.Stop();
-        var placement = _pendingPlacement;
-        _pendingPlacement = null;
-        if (placement is not null) PlacementChanged?.Invoke(placement);
+        var layout = _pendingLayout;
+        _pendingLayout = null;
+        if (layout is not null) LayoutChanged?.Invoke(layout);
+    }
+
+    private PipLayout? CaptureLayout()
+    {
+        if (Placement is not { } placement) return null;
+        var display = DisplayMetrics.ForWindow(_handle);
+        return ScreenLayout.Remember(placement, display.WorkArea, display.Dpi, display.DeviceName);
     }
 
     public void SetMode(PipVisibilityMode mode)
@@ -151,11 +184,11 @@ public partial class PipFrameWindow : Window
 
     private void UpdateVideo()
     {
-        if (_video is null || !GetClientRect(_handle, out var client) || !GetWindowRect(_handle, out var frame)) return;
-        var scale = GetDpiForWindow(_handle) / 96d;
-        var border = (int)Math.Round(BorderDip * scale);
-        var bar = (int)Math.Round(HeightDip * scale);
-        var destination = new NativeBounds { Left = border, Top = border + bar, Right = client.Right - border, Bottom = client.Bottom - border };
+        if (_video is null || PresentationSource.FromVisual(VideoSlot) is null || !GetWindowRect(_handle, out var frame)) return;
+        var first = VideoSlot.PointToScreen(new Point());
+        var last = VideoSlot.PointToScreen(new Point(VideoSlot.ActualWidth, VideoSlot.ActualHeight));
+        var destination = new NativeBounds { Left = (int)Math.Round(first.X - frame.Left), Top = (int)Math.Round(first.Y - frame.Top),
+            Right = (int)Math.Round(last.X - frame.Left), Bottom = (int)Math.Round(last.Y - frame.Top) };
         if (destination.Right <= destination.Left || destination.Bottom <= destination.Top) return;
         var restore = new NativeBounds { Left = frame.Left + destination.Left, Top = frame.Top + destination.Top,
             Right = frame.Left + destination.Right, Bottom = frame.Top + destination.Bottom };
@@ -169,6 +202,7 @@ public partial class PipFrameWindow : Window
         PipWindowService.UnregisterFrame(_video.VideoWindow);
         _video.Release(restoreVideo);
         _video = null;
+        _layout = null;
     }
 
     private void Video_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -186,8 +220,15 @@ public partial class PipFrameWindow : Window
     private nint WindowMessages(nint hwnd, int message, nint wParam, nint lParam, ref bool handled)
     {
         if (message == 0x0021) { handled = true; return 3; } // MA_NOACTIVATE
-        if (message == 0x0047 || message == 0x02E0) { UpdateVideo(); ObservePlacement(); } // position/size or monitor DPI
-        if (message == 0x0232) FlushPlacement(); // a drag/resize gesture has ended
+        if (message == 0x0231) _userChanging = true;
+        if (message == 0x0047 && _displayLayout.Display == DisplayMetrics.ForWindow(_handle))
+        { UpdateVideo(); ObservePlacement(); }
+        if (message == 0x0232)
+        {
+            ObservePlacement();
+            _userChanging = false;
+            FlushPlacement();
+        }
         return 0;
     }
     protected override void OnClosed(EventArgs e)
@@ -197,13 +238,8 @@ public partial class PipFrameWindow : Window
     }
 
     [StructLayout(LayoutKind.Sequential)] private struct ScreenPoint { public int X, Y; }
-    [StructLayout(LayoutKind.Sequential)] private struct MonitorInfo { public int Size; public NativeBounds Monitor, Work; public uint Flags; }
-    [DllImport("user32.dll")] private static extern nint MonitorFromRect(ref NativeBounds bounds, uint flags);
-    [DllImport("user32.dll", SetLastError = true)] private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
-    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint window);
     [DllImport("user32.dll")] private static extern int GetWindowLong(nint window, int index);
     [DllImport("user32.dll")] private static extern int SetWindowLong(nint window, int index, int value);
-    [DllImport("user32.dll")] private static extern bool GetClientRect(nint window, out NativeBounds bounds);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(nint window, out NativeBounds bounds);
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out ScreenPoint point);
     [DllImport("user32.dll")] private static extern nint SendMessage(nint window, int message, nint wParam, nint lParam);

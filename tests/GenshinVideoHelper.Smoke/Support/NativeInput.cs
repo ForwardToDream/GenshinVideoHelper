@@ -42,6 +42,8 @@ internal static class NativeInput
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] public static extern nint WindowFromPoint(ScreenPoint point);
     [DllImport("user32.dll")] public static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(nint window);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(nint window, int command);
     [DllImport("user32.dll")] public static extern bool IsWindowEnabled(nint window);
     [DllImport("user32.dll", SetLastError = true)] public static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
     [StructLayout(LayoutKind.Sequential)] public struct Bounds { public int Left, Top, Right, Bottom; }

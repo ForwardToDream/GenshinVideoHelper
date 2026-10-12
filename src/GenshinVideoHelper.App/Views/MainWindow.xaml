@@ -14,12 +14,13 @@
    <Grid.RowDefinitions><RowDefinition Height="48" /><RowDefinition Height="*" /><RowDefinition Height="34" /></Grid.RowDefinitions>
    <Border Background="{StaticResource TitleBarBrush}" CornerRadius="5,5,0,0">
     <Grid>
-     <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
-      <Image Source="/GenshinVideoHelper;component/Resources/AppIcon.png" Width="24" Height="24" Margin="0,0,10,0" />
-      <TextBlock Text="GenshinVideoHelper" Foreground="White" FontSize="17" FontWeight="SemiBold" />
-      <TextBlock Text="原神视频跟随" Foreground="#DFEEFF" FontSize="12" Margin="14,2,0,0" VerticalAlignment="Center" />
-     </StackPanel>
-     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,6,0" VerticalAlignment="Center">
+     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+     <DockPanel Margin="20,0,12,0" VerticalAlignment="Center">
+      <Image DockPanel.Dock="Left" Source="/GenshinVideoHelper;component/Resources/AppIcon.png" Width="24" Height="24" Margin="0,0,10,0" />
+      <TextBlock x:Name="HeaderSubtitle" DockPanel.Dock="Right" Text="原神视频跟随" Foreground="#DFEEFF" FontSize="12" Margin="14,2,0,0" VerticalAlignment="Center" />
+      <TextBlock Text="GenshinVideoHelper" Foreground="White" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+     </DockPanel>
+     <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,6,0" VerticalAlignment="Center">
       <TextBlock x:Name="HeaderConnectionState" Text="等待开始" Foreground="#DFEEFF" FontSize="12" VerticalAlignment="Center" Margin="0,0,18,0" />
       <Button Style="{StaticResource CaptionButton}" Click="Minimize_Click" ToolTip="最小化到系统托盘" AutomationProperties.Name="最小化" shell:WindowChrome.IsHitTestVisibleInChrome="True"><TextBlock Style="{StaticResource Symbol}" Text="&#xE921;" Foreground="White" FontSize="12" /></Button>
       <Button Style="{StaticResource CaptionButton}" Click="Maximize_Click" ToolTip="最大化 / 还原" AutomationProperties.Name="最大化或还原" shell:WindowChrome.IsHitTestVisibleInChrome="True"><TextBlock Style="{StaticResource Symbol}" Text="&#xE922;" Foreground="White" FontSize="12" /></Button>
@@ -28,23 +29,26 @@
     </Grid>
    </Border>
    <Grid Grid.Row="1">
-    <Grid.ColumnDefinitions><ColumnDefinition Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+    <Grid.ColumnDefinitions><ColumnDefinition x:Name="NavigationColumn" Width="160" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
     <Border Background="{StaticResource SidebarBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
      <Grid><Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
       <StackPanel Margin="0,16,0,0">
-       <TextBlock Text="视频跟随" Style="{StaticResource SecondaryText}" Margin="20,0,0,9" />
+       <TextBlock x:Name="SidebarTitle" Text="视频跟随" Style="{StaticResource SecondaryText}" Margin="20,0,0,9" />
        <RadioButton x:Name="NavFollow" Style="{StaticResource NavItem}" GroupName="Navigation" Tag="Follow" IsChecked="True" Checked="Navigation_Checked"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Symbol}" Text="&#xE768;" Margin="0,0,13,0" /><TextBlock Text="启动" VerticalAlignment="Center" /></StackPanel></RadioButton>
        <RadioButton x:Name="NavProgress" Style="{StaticResource NavItem}" GroupName="Navigation" Tag="Progress" Checked="Navigation_Checked"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Symbol}" Text="&#xE73A;" Margin="0,0,13,0" /><TextBlock Text="进度" VerticalAlignment="Center" /></StackPanel></RadioButton>
        <RadioButton x:Name="NavVision" Style="{StaticResource NavItem}" GroupName="Navigation" Tag="Vision" Checked="Navigation_Checked"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Symbol}" Text="&#xE707;" Margin="0,0,13,0" /><TextBlock Text="地图识别" VerticalAlignment="Center" /></StackPanel></RadioButton>
        <RadioButton x:Name="NavHotkeys" Style="{StaticResource NavItem}" GroupName="Navigation" Tag="Hotkeys" Checked="Navigation_Checked"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Symbol}" Text="&#xE765;" Margin="0,0,13,0" /><TextBlock Text="快捷键" VerticalAlignment="Center" /></StackPanel></RadioButton>
        <RadioButton x:Name="NavSettings" Style="{StaticResource NavItem}" GroupName="Navigation" Tag="Settings" Checked="Navigation_Checked"><StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Symbol}" Text="&#xE713;" Margin="0,0,13,0" /><TextBlock Text="设置" VerticalAlignment="Center" /></StackPanel></RadioButton>
       </StackPanel>
+      </ScrollViewer>
      </Grid>
     </Border>
     <Grid Grid.Column="1">
      <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition /></Grid.RowDefinitions>
      <StackPanel Margin="24,20,24,18"><TextBlock x:Name="PageHeading" Text="启动" Style="{StaticResource PageTitle}" /><TextBlock x:Name="PageDescription" Text="选择攻略，自动播放并进入左下角画中画。" Style="{StaticResource SecondaryText}" /></StackPanel>
-     <Grid x:Name="PagesHost" Grid.Row="1">
+     <ScrollViewer x:Name="PageViewport" Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+     <Grid x:Name="PagesHost" MinWidth="480" Width="{Binding ViewportWidth, ElementName=PageViewport}">
       <ScrollViewer x:Name="VisionPage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
        <StackPanel Margin="24,0,24,20">
         <Border Style="{StaticResource Card}"><StackPanel>
@@ -184,7 +188,7 @@
          <Separator Margin="0,18,0,18" />
          <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="90" /><ColumnDefinition /><ColumnDefinition Width="65" /></Grid.ColumnDefinitions>
           <TextBlock Text="默认宽度" VerticalAlignment="Center" />
-          <Slider x:Name="PipWidthSlider" Grid.Column="1" Minimum="280" Maximum="800" TickFrequency="20" IsSnapToTickEnabled="True" Margin="12,0,15,0" VerticalAlignment="Center" ValueChanged="PipWidth_Changed" />
+          <Slider x:Name="PipWidthSlider" Grid.Column="1" Minimum="280" Maximum="800" TickFrequency="20" IsSnapToTickEnabled="True" Margin="12,0,15,0" VerticalAlignment="Center" ValueChanged="PipWidth_Changed" ToolTip="按屏幕比例调整；修改后放回左下角应用" />
           <TextBlock x:Name="PipWidthLabel" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="{StaticResource AccentBrush}" />
          </Grid>
          <TextBlock Text="拖动或缩放浮窗后自动记忆布局。默认宽度用于首次开启或“放回左下角”。" Style="{StaticResource SecondaryText}" Margin="0,11,0,0" />
@@ -321,6 +325,7 @@
        </StackPanel></Border>
       </Grid>
      </Grid>
+     </ScrollViewer>
     </Grid>
    </Grid>
    <Border Grid.Row="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Background="White" CornerRadius="0,0,5,5">

@@ -8,10 +8,20 @@ internal static class Program
     {
         try
         {
+            if (args.Contains("--focus-fixture"))
+            {
+                var fixture = new System.Windows.Window { Title = "画中画测试 · 模拟游戏前台", Width = 400, Height = 200,
+                    WindowStartupLocation = System.Windows.WindowStartupLocation.CenterScreen,
+                    Content = new System.Windows.Controls.TextBlock { Text = "正在验证画中画保持前台焦点", Margin = new System.Windows.Thickness(20) } };
+                fixture.Loaded += (_, _) => NativeInput.ShowWindow(new System.Windows.Interop.WindowInteropHelper(fixture).Handle, 8);
+                new System.Windows.Application().Run(fixture);
+                return 0;
+            }
             var root = args.Length > 1 ? Path.GetFullPath(args[1]) : Directory.GetCurrentDirectory();
             SmokeBrowser.Kind = args.Contains("--edge") ? Core.Models.BrowserKind.Edge : Core.Models.BrowserKind.Chrome;
             TestArtifacts.SweepStale(root);
-            if (args.Contains("--browser-switch")) BrowserSwitchTests.Run(root);
+            if (args.Contains("--display")) DisplayTests.Run(root);
+            else if (args.Contains("--browser-switch")) BrowserSwitchTests.Run(root);
             else if (args.Contains("--vision-browser")) VisionTests.RunBrowser(root);
             else if (args.Contains("--vision")) VisionTests.Run(root);
             else if (args.Contains("--login")) LoginTests.Run(root);
