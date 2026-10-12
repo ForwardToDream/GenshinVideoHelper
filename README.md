@@ -4,7 +4,7 @@
 
 ## 下载
 
-在 [GitHub Releases](https://github.com/ForwardToDream/GenshinVideoHelper/releases) 下载 `GenshinVideoHelper-win-x64.zip`，解压后运行 `GenshinVideoHelper.exe`。
+在 [GitHub Releases](https://github.com/ForwardToDream/GenshinVideoHelper/releases) 下载 `GenshinVideoHelper.exe`，直接运行。
 
 需要 **Windows 10 2004 或更新版本 / Windows 11（64 位）**，以及 **Chrome 或 Edge**。发布版自带运行时。
 
@@ -59,7 +59,9 @@
 
 ## 更新与备份
 
-退出助手后，用新包覆盖程序文件，保留 exe 同目录的 `.gvh/`。
+每次启动会在后台检查正式版本。有新版时点击“查看更新”打开下载页；也可在“设置”页手动检查。
+
+退出助手后，用新版 exe 覆盖旧文件，保留同目录的 `.gvh/`。
 
 `.gvh/` 保存设置、快捷键、观看进度和浏览器登录状态。备份或搬动程序时一起带走。
 

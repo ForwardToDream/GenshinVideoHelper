@@ -311,6 +311,7 @@ internal static class UiTests
         Capture(missingWindow, root, "ui-library-missing-compact.png", 860, 600);
         missingWindow.Close();
         BrowserUiTests.Run(root);
+        UpdateUiTests.Run(root);
         Console.WriteLine("WPF UI: five panels, progress editing, default/minimum sizes, full-row Start below episodes, part boundaries, long title and state preservation passed.");
     }
 

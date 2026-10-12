@@ -1,5 +1,8 @@
 ﻿$ErrorActionPreference = 'Stop'
 $taskRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
+$props = [xml](Get-Content -LiteralPath (Join-Path $taskRoot 'Directory.Build.props') -Raw)
+$releaseVersion = [string]$props.Project.PropertyGroup.Version
+if ($releaseVersion -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw '必须设置三段正式版本号。' }
 $artifacts = Join-Path $taskRoot 'artifacts'
 $destination = Join-Path $artifacts 'GenshinVideoHelper'
 $staging = Join-Path $artifacts ('publish-' + [guid]::NewGuid().ToString('N'))
@@ -7,7 +10,12 @@ $archive = Join-Path $artifacts 'GenshinVideoHelper-win-x64.zip'
 try {
     dotnet publish (Join-Path $taskRoot 'src/GenshinVideoHelper.App/GenshinVideoHelper.App.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=embedded -p:DebugSymbols=false -o $staging
     if ($LASTEXITCODE -ne 0) { throw "发布失败，退出码 $LASTEXITCODE" }
-    if (!(Test-Path -LiteralPath (Join-Path $staging 'GenshinVideoHelper.exe'))) { throw '未生成 exe。' }
+    $exe = Join-Path $staging 'GenshinVideoHelper.exe'
+    if (!(Test-Path -LiteralPath $exe)) { throw '未生成 exe。' }
+    $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($exe)
+    if ("$($info.FileMajorPart).$($info.FileMinorPart).$($info.FileBuildPart)" -cne $releaseVersion -or $info.FilePrivatePart -ne 0) {
+        throw 'exe 版本与源码不一致。'
+    }
     # Package only build output, never the destination's user data.
     Compress-Archive -LiteralPath (Get-ChildItem -LiteralPath $staging -File).FullName -DestinationPath $archive -Force
     New-Item -ItemType Directory -Path $destination -Force | Out-Null
@@ -19,6 +27,7 @@ try {
         $_.Name -like 'GenshinVideoHelper*.dll' -or $_.Name -like 'GenshinVideoHelper*.pdb' -or
         $_.Name -in @('GenshinVideoHelper.deps.json', 'GenshinVideoHelper.runtimeconfig.json')
     } | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
+    Write-Host "版本：$releaseVersion"
     Write-Host "可直接运行：$(Join-Path $destination 'GenshinVideoHelper.exe')"
     Write-Host "分发包：$archive"
 }

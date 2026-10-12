@@ -84,6 +84,7 @@ public partial class MainWindow : Window
         InitializeProgress();
         InitializeVision();
         InitializeBrowsers();
+        InitializeUpdates();
         InitializeLibraries();
         _ready = true;
         _previewDebounce.Tick += async (_, _) => await LoadSelectedEpisodesAsync();
@@ -120,8 +121,7 @@ public partial class MainWindow : Window
     private void OpenReadme_Click(object sender, RoutedEventArgs e)
     {
         var path = Path.Combine(AppContext.BaseDirectory, "README.md");
-        if (!File.Exists(path)) { SetStatus("使用说明未找到，请查看项目根目录 README.md。", true); return; }
-        OpenWithShell(path);
+        OpenWithShell(File.Exists(path) ? path : "https://github.com/ForwardToDream/GenshinVideoHelper#readme");
     }
     private void OpenLink_Click(object sender, RoutedEventArgs e)
     {
@@ -418,6 +418,7 @@ public partial class MainWindow : Window
         if (_shutdownComplete) return;
         if (_closing) { e.Cancel = true; return; }
         _closing = true;
+        StopUpdates();
         _loginPrompt?.Close();
         AppLog.Info("App", "开始退出。");
         Hide();

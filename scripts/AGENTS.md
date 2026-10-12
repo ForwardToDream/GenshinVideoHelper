@@ -6,3 +6,4 @@
 - 后台进程用隐藏窗口；测试和发布保持可重复，不依赖个人浏览器配置。
 - 验证 Release 构建、包内容、exe 启动与正常退出；版本、标签与源码对应。
 - 本地打包不创建 GitHub Release；上传操作按用户明确要求执行。见 [Release](../docs/release.md)。
+- GitHub 手动触发 `Release draft`，校验标签版本、测试、调用 `publish.ps1`；只上传 exe 为草稿，由维护者发布。

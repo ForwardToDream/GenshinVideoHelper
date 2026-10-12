@@ -11,6 +11,7 @@ using GenshinVideoHelper.Infrastructure.Browser;
 using GenshinVideoHelper.Infrastructure.Library;
 using GenshinVideoHelper.Infrastructure.Progress;
 using GenshinVideoHelper.Infrastructure.Settings;
+using GenshinVideoHelper.Infrastructure.Updates;
 
 namespace GenshinVideoHelper.App.Composition;
 
@@ -18,6 +19,7 @@ namespace GenshinVideoHelper.App.Composition;
 public sealed class AppServices : IDisposable
 {
     private readonly IDisposable? _ownedBrowser, _ownedEpisodes, _ownedVideo;
+    private readonly IDisposable? _ownedUpdates;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly bool _enableWarmup;
     private readonly IEpisodeProvider _episodes;
@@ -41,6 +43,7 @@ public sealed class AppServices : IDisposable
     public EpisodePreviewService Preview { get; }
     public WindowsPipController Pip { get; }
     public WatchProgressService Progress { get; }
+    public IUpdateChecker? Updates { get; }
 
     public static AppServices CreateDefault()
     {
@@ -49,13 +52,14 @@ public sealed class AppServices : IDisposable
         AppLog.MinLevel = loaded.Settings.LogLevel;
         AppLog.Info("App", $"配置已加载，日志级别 {loaded.Settings.LogLevel}{(loaded.Warning is null ? "" : "；" + loaded.Warning)}。");
         return new(loaded.Settings, ApplicationPaths.BrowserProfileDirectory, store, loadWarning: loaded.Warning, enableWarmup: true,
-            progressStore: new JsonProgressStore(ApplicationPaths.ProgressPath));
+            progressStore: new JsonProgressStore(ApplicationPaths.ProgressPath), updateFactory: () => new GitHubUpdateChecker());
     }
 
     public AppServices(AppSettings settings, string browserProfile, ISettingsStore? store = null,
         VideoLibraryCatalog? libraries = null, IEpisodeProvider? episodes = null,
         IBrowserSession? browser = null, IVideoPlayer? video = null, string? loadWarning = null, Func<IEpisodeProvider>? episodeFactory = null, bool enableWarmup = false,
-        IProgressStore? progressStore = null, IBrowserCatalog? browserCatalog = null, Func<BrowserKind, string>? profileFor = null)
+        IProgressStore? progressStore = null, IBrowserCatalog? browserCatalog = null, Func<BrowserKind, string>? profileFor = null,
+        Func<IUpdateChecker>? updateFactory = null)
     {
         _enableWarmup = enableWarmup;
         Settings = settings; SettingsStore = store;
@@ -84,6 +88,8 @@ public sealed class AppServices : IDisposable
         VideoActivity = video as IVideoActivitySource;
         VideoAccount = video as IBilibiliAccountService;
         Follow = new(Browser, video, episodes, Pip, _cache, progress: Progress);
+        Updates = updateFactory?.Invoke();
+        _ownedUpdates = Updates as IDisposable;
     }
 
     /// <summary>Reads a video's parts without opening it, so its progress can be shown and edited.</summary>
@@ -132,5 +138,6 @@ public sealed class AppServices : IDisposable
         Vision?.Dispose();
         Follow.Dispose(); Preview.Dispose(); Pip.Dispose();
         _ownedVideo?.Dispose(); _ownedBrowser?.Dispose(); _ownedEpisodes?.Dispose();
+        _ownedUpdates?.Dispose();
     }
 }

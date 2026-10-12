@@ -1,0 +1,62 @@
+name: Release draft
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '已推送的版本标签，例如 v0.1.0'
+        required: true
+        type: string
+        default: v0.1.0
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Validate tag
+        run: |
+          if ($env:RELEASE_TAG -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+            throw '版本标签必须为 v主版本.次版本.修订号。'
+          }
+
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Verify source version
+        run: |
+          $props = [xml](Get-Content -LiteralPath Directory.Build.props -Raw)
+          $version = [string]$props.Project.PropertyGroup.Version
+          if ($env:RELEASE_TAG -cne "v$version") { throw '标签与源码版本不一致。' }
+          Write-Host "发布 $env:RELEASE_TAG，源码 $(git rev-parse HEAD)"
+
+      - name: Test
+        run: .\scripts\test.ps1
+
+      - name: Build exe
+        run: .\scripts\publish.ps1
+
+      - name: Upload draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:RELEASE_TAG artifacts/GenshinVideoHelper/GenshinVideoHelper.exe --repo $env:GITHUB_REPOSITORY --verify-tag --draft --title $env:RELEASE_TAG --generate-notes
+          if ($LASTEXITCODE -ne 0) { throw 'Release 草稿创建失败；不覆盖已有版本。' }
