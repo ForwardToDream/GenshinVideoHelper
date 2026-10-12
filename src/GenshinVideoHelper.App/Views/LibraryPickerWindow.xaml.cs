@@ -13,6 +13,7 @@ public partial class LibraryPickerWindow : Window
 {
     private readonly Choice[] _choices;
     private readonly string? _currentId;
+    private readonly bool _firstLaunch;
     private ScrollViewer? _wheelViewer;
     private double _wheelTarget;
     private int _wheelVersion;
@@ -38,11 +39,19 @@ public partial class LibraryPickerWindow : Window
         }
     }
 
-    public LibraryPickerWindow(VideoLibraryCatalog catalog, string? currentId)
+    public LibraryPickerWindow(VideoLibraryCatalog catalog, string? currentId, bool firstLaunch = false)
     {
         _currentId = currentId;
+        _firstLaunch = firstLaunch;
         _choices = new[] { new Choice(null) }.Concat(catalog.Libraries.Select(library => new Choice(library))).ToArray();
         InitializeComponent();
+        if (firstLaunch)
+        {
+            Title = PickerHeading.Text = "欢迎使用 · 选择合集库";
+            FirstLaunchIntro.Visibility = Visibility.Visible;
+            CancelLibraryButton.Content = "保持手动输入";
+            PickerStatusText.Text = "本窗口仅在首次启动显示。";
+        }
         DisplayLayout = new(this);
         Filter();
         if (catalog.Errors.Count > 0) PickerStatusText.Text = "部分视频库未能加载，可使用其他库或手动输入。";
@@ -67,7 +76,7 @@ public partial class LibraryPickerWindow : Window
             results.FirstOrDefault(choice => choice.Library?.Id == _currentId);
         EmptyStateText.Visibility = results.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         ResultCountText.Text = $"{results.Count(choice => choice.Library is not null)} 个视频库";
-        UseLibraryButton.IsEnabled = LibraryResults.SelectedItem is Choice;
+        UpdateSelection();
     }
 
     private void Picker_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -136,17 +145,19 @@ public partial class LibraryPickerWindow : Window
 
     private void LibraryResults_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (UseLibraryButton is not null)
-        {
-            UseLibraryButton.IsEnabled = LibraryResults.SelectedItem is Choice;
-            UseLibraryButton.Content = LibraryResults.SelectedItem is Choice { Library: null } ? "手动输入" : "使用此库";
-        }
+        if (UseLibraryButton is not null) UpdateSelection();
+    }
+
+    private void UpdateSelection()
+    {
+        UseLibraryButton.IsEnabled = LibraryResults.SelectedItem is Choice choice && (!_firstLaunch || choice.Library is not null);
+        UseLibraryButton.Content = !_firstLaunch && LibraryResults.SelectedItem is Choice { Library: null } ? "手动输入" : "使用此库";
     }
 
     private void ClearSearch_Click(object sender, RoutedEventArgs e) { SearchInput.Clear(); SearchInput.Focus(); }
     private void UseLibrary_Click(object sender, RoutedEventArgs e)
     {
-        if (LibraryResults.SelectedItem is not Choice choice) return;
+        if (LibraryResults.SelectedItem is not Choice choice || (_firstLaunch && choice.Library is null)) return;
         SelectedLibrary = choice.Library;
         DialogResult = true;
     }

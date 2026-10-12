@@ -19,7 +19,7 @@ internal static class DisplayTests
         var app = CreateTestApplication();
         var directory = Path.Combine(root, "artifacts", "display-layout");
         Directory.CreateDirectory(directory);
-        var window = new MainWindow(new AppServices(new AppSettings { HotkeysEnabled = false },
+        var window = new MainWindow(new AppServices(new AppSettings { IsFirstLaunch = false, HotkeysEnabled = false },
             TestArtifacts.PathFor(root, "display-ui"), episodeFactory: PreviewService));
         var content = (FrameworkElement)window.Content;
         try

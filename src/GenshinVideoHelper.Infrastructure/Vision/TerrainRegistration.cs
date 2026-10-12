@@ -43,10 +43,11 @@ public sealed class TerrainRegistration : IDisposable
     private static unsafe bool Black(Mat gray,Mat mask)
     {
         Span<int> histogram=stackalloc int[256];histogram.Clear();int count=0;
-        for(int y=0;y<gray.Height;y++)
+        int height=gray.Height,width=gray.Width;
+        for(int y=0;y<height;y++)
         {
             var row=(byte*)gray.Ptr(y);var yes=(byte*)mask.Ptr(y);
-            for(int x=0;x<gray.Width;x++)if(yes[x]!=0){histogram[row[x]]++;count++;}
+            for(int x=0;x<width;x++)if(yes[x]!=0){histogram[row[x]]++;count++;}
         }
         if(count==0)return true;
         int sum=0;

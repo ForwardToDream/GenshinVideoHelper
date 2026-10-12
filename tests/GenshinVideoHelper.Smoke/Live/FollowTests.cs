@@ -40,7 +40,7 @@ internal static class FollowTests
     public static async Task FollowUiTestAsync(string root)
     {
         await using var session = await ChromiumFixture.StartAsync(root, headed: true);
-        var settings = new AppSettings { BrowserPreference = SmokeBrowser.Preference, SelectedVideoLibraryId = null, VideoUrl = "https://www.bilibili.com/video/BV1hjgG6jEa6/?spm_id_from=333.788.videopod.episodes&p=3" };
+        var settings = new AppSettings { IsFirstLaunch = false, BrowserPreference = SmokeBrowser.Preference, SelectedVideoLibraryId = null, VideoUrl = "https://www.bilibili.com/video/BV1hjgG6jEa6/?spm_id_from=333.788.videopod.episodes&p=3" };
         var window = new GenshinVideoHelper.App.MainWindow(new AppServices(settings, session.ProfileDirectory, profileFor: _ => session.ProfileDirectory))
         { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
         window.Show();

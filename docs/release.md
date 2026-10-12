@@ -2,7 +2,9 @@
 
 [文档目录](README.md) · [测试](testing.md)
 
-发布 **Windows x64 自带运行时的单文件 exe**。GitHub 只上传 `GenshinVideoHelper.exe`；源码由对应标签提供。
+发布 **Windows x64 压缩单文件 exe**，不内置 .NET。用户安装 **.NET 8 Desktop Runtime x64**，无需 SDK。GitHub 只上传 `GenshinVideoHelper.exe`；源码由对应标签提供。
+
+`publish.ps1` 使用 `--self-contained false` 与 `EnableCompressionInSingleFile=true`，依赖系统共享运行时。OpenCV 使用同版本托管包与 `runtime.win.slim`，保留 ORB、图像处理和几何估计，不打包视频解码模块。WPF 不启用裁剪；发布后验证单独 exe 的启动和 CV 回归。[微软单文件说明](https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview)。
 
 ## 版本
 
@@ -37,7 +39,7 @@ git push origin v0.1.0
 
 ## 启动更新检查
 
-每次启动后台检查一次；设置页可手动重试。同时只允许一次请求，6 秒超时；退出取消检查，不等待网络。无网络、限流或失败仅记录日志，不弹窗，不影响跟随。
+每次启动后台检查一次；设置页可手动重试。有新版仅在版本号左侧显示红色“可更新”，没有新版或检查失败则隐藏。同时只允许一次请求，6 秒超时；退出取消检查，不等待网络。不弹窗，不影响跟随。
 
 使用公开仓库 `ForwardToDream/GenshinVideoHelper` 的 `GET /repos/ForwardToDream/GenshinVideoHelper/releases/latest`，不需要账号或令牌。只比较正式版本的三段数字；较旧或相同版本不提示。尚未正式发布时 404 视为暂无更新；不读草稿、预发布，不下载附件。[GitHub 接口](https://docs.github.com/en/rest/releases/releases#get-the-latest-release)。
 

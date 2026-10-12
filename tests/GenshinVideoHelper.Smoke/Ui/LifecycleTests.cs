@@ -59,7 +59,7 @@ internal static class LifecycleTests
         }
         var pip = PipWindowService.FindPip(ownedPid);
         Check(pip != 0, "Lifecycle starts with real native PiP");
-        var window = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { BrowserPreference = SmokeBrowser.Preference, VideoUrl = "", SelectedVideoLibraryId = null }, owned.ProfileDirectory, episodeFactory: PreviewService, enableWarmup: true, profileFor: _ => owned.ProfileDirectory))
+        var window = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { IsFirstLaunch = false, BrowserPreference = SmokeBrowser.Preference, VideoUrl = "", SelectedVideoLibraryId = null }, owned.ProfileDirectory, episodeFactory: PreviewService, enableWarmup: true, profileFor: _ => owned.ProfileDirectory))
         { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
         try
         {
@@ -96,7 +96,7 @@ internal static class LifecycleTests
             using var startupDirectory = TestArtifacts.CreateTemp(root, "startup-exit");
             var startupProfile = startupDirectory.Path;
             using var startingBrowser = SmokeBrowser.Create(startupProfile);
-            var startupWindow = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { BrowserPreference = SmokeBrowser.Preference, VideoUrl = "https://www.bilibili.com/video/BV1hjgG6jEa6/?p=3", SelectedVideoLibraryId = null }, startupProfile, episodeFactory: PreviewService, browser: startingBrowser))
+            var startupWindow = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { IsFirstLaunch = false, BrowserPreference = SmokeBrowser.Preference, VideoUrl = "https://www.bilibili.com/video/BV1hjgG6jEa6/?p=3", SelectedVideoLibraryId = null }, startupProfile, episodeFactory: PreviewService, browser: startingBrowser))
             { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
             try
             {

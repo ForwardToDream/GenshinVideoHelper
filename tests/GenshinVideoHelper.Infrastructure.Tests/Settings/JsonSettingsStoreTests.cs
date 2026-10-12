@@ -17,6 +17,8 @@ public sealed class JsonSettingsStoreTests : IDisposable
         Assert.Null(loaded.Warning);
         Assert.True(File.Exists(PathFor()));
         Assert.Equal("", loaded.Settings.VideoUrl);
+        Assert.Null(loaded.Settings.SelectedVideoLibraryId);
+        Assert.True(loaded.Settings.IsFirstLaunch);
         Assert.Equal(9, loaded.Settings.Hotkeys.Count);
         Assert.Null(loaded.Settings.PipLayout);
         Assert.Equal(BrowserPreference.Auto, loaded.Settings.BrowserPreference);
@@ -30,6 +32,7 @@ public sealed class JsonSettingsStoreTests : IDisposable
         var settings = store.Load().Settings;
         settings.VideoUrl = "https://www.bilibili.com/video/BV1hjgG6jEa6/?p=4";
         settings.SelectedVideoLibraryId = null;
+        settings.IsFirstLaunch = false;
         settings.SeekSeconds = 10;
         settings.PipWidth = 480;
         settings.PipLayout = new(.333, 1.777, .25, .8, "DISPLAY2");
@@ -40,6 +43,7 @@ public sealed class JsonSettingsStoreTests : IDisposable
         var actual = store.Load().Settings;
         Assert.Equal(settings.VideoUrl, actual.VideoUrl);
         Assert.Null(actual.SelectedVideoLibraryId);
+        Assert.False(actual.IsFirstLaunch);
         Assert.Equal(10, actual.SeekSeconds);
         Assert.Equal(480, actual.PipWidth);
         Assert.Equal(settings.PipLayout, actual.PipLayout);
@@ -62,6 +66,17 @@ public sealed class JsonSettingsStoreTests : IDisposable
         store.Save(loaded.Settings);
         Assert.Equal(contents, File.ReadAllText(Assert.Single(Directory.GetFiles(_folder, "*.bak"))));
         Assert.Null(new JsonSettingsStore(PathFor()).Load().Warning);
+    }
+
+    [Fact]
+    public void Load_FirstLaunchFieldMissing_DefaultsToFirstLaunch()
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(PathFor(), "{\"SeekSeconds\":10}");
+        var settings = new JsonSettingsStore(PathFor()).Load().Settings;
+        Assert.True(settings.IsFirstLaunch);
+        Assert.Null(settings.SelectedVideoLibraryId);
+        Assert.Equal(10, settings.SeekSeconds);
     }
 
     [Fact]

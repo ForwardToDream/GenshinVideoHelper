@@ -112,9 +112,9 @@ internal static class UiTests
             Check(results.Items.Count == 1, "Shadow creator search finds its collection");
             search.Text = "穿山甲";
             Check(results.Items.Count == 2, "Creator search finds both quest variants");
-            search.Text = "穿山甲 有任务版";
+            search.Text = "穿山甲 （任务版）";
             Check(results.Items.Count == 1, "Creator and quest variant can be searched together");
-            search.Text = "穿山甲 无任务版";
+            search.Text = "穿山甲 （非任务版）";
             Check(results.Items.Count == 1, "The collection without quests can be selected independently");
         }
         finally { builtIn.Close(); }
@@ -201,7 +201,7 @@ internal static class UiTests
     public static void RenderUi(string root)
     {
         var app = CreateTestApplication();
-        var window = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { HotkeysEnabled = false }, TestArtifacts.PathFor(root, "ui-test-profile"), episodeFactory: PreviewService));
+        var window = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { IsFirstLaunch = false, HotkeysEnabled = false, SelectedVideoLibraryId = VideoLibraryCatalog.DefaultLibraryId }, TestArtifacts.PathFor(root, "ui-test-profile"), episodeFactory: PreviewService));
         Directory.CreateDirectory(Path.Combine(root, "artifacts"));
         Check(window.FindName("NavConnection") is null && window.FindName("NavPip") is null &&
                ((Grid)window.FindName("PagesHost")).Children.Count == 5, "Start, progress, vision, hotkeys and settings pages");
@@ -294,7 +294,7 @@ internal static class UiTests
         window.Close();
         var library = VideoLibraryLoader.LoadBuiltIn().Libraries.Single(library => library.Id == VideoLibraryCatalog.DefaultLibraryId);
         var second = library with { Id = "long-test-library", Name = "仅测试 · " + string.Concat(Enumerable.Repeat("长标题的一条龙地图导航视频库", 5)), Videos = [library.Videos[0] with { Title = string.Concat(Enumerable.Repeat("蒙德、璃月、龙脊雪山 · 长标题", 5)) }] };
-        var multipleSettings = new AppSettings { HotkeysEnabled = false, SelectedVideoLibraryId = second.Id };
+        var multipleSettings = new AppSettings { IsFirstLaunch = false, HotkeysEnabled = false, SelectedVideoLibraryId = second.Id };
         var multipleWindow = new GenshinVideoHelper.App.MainWindow(new AppServices(multipleSettings, TestArtifacts.PathFor(root, "ui-test-profile"), libraries: new VideoLibraryCatalog([library, second], []), episodeFactory: PreviewService));
         Check(GetField<VideoLibrary>(multipleWindow, "_activeLibrary")!.Id == second.Id && ((ComboBox)multipleWindow.FindName("GuideVideoSelector")).Items.Count == 1, "Multiple-library saved ID selects matching list instead of first library");
         ((ComboBox)multipleWindow.FindName("GuideVideoSelector")).SelectedIndex = 0;
@@ -306,11 +306,12 @@ internal static class UiTests
         Check(multipleSettings.SelectedVideoLibraryId == library.Id && ((ComboBox)multipleWindow.FindName("GuideVideoSelector")).Items.Count == 22, "Switching between two libraries reloads correct map list");
         multipleWindow.Close();
         TestLibraryPicker(root, library, second);
-        var missingWindow = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { HotkeysEnabled = false, SelectedVideoLibraryId = "missing-library" }, TestArtifacts.PathFor(root, "ui-test-profile"), episodeFactory: PreviewService));
+        var missingWindow = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { IsFirstLaunch = false, HotkeysEnabled = false, SelectedVideoLibraryId = "missing-library" }, TestArtifacts.PathFor(root, "ui-test-profile"), episodeFactory: PreviewService));
         Check(((TextBlock)missingWindow.FindName("StatusText")).Text.Contains("不存在") && ((ComboBox)missingWindow.FindName("GuideVideoSelector")).Items.Count == 0 && ((TextBox)missingWindow.FindName("UrlInput")).IsEnabled, "Missing library preserves manual input and reports error");
         Capture(missingWindow, root, "ui-library-missing-compact.png", 860, 600);
         missingWindow.Close();
         BrowserUiTests.Run(root);
+        FirstLaunchUiTests.Run(root);
         UpdateUiTests.Run(root);
         Console.WriteLine("WPF UI: five panels, progress editing, default/minimum sizes, full-row Start below episodes, part boundaries, long title and state preservation passed.");
     }

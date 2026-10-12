@@ -50,7 +50,7 @@ internal static class LatencyTests
         using var otherProcess = Process.GetProcessById(await other.GetBrowserProcessIdAsync());
         _ = otherProcess.Handle;
         var profile = Path.Combine(directory, "helper-chrome");
-        var window = new MainWindow(new AppServices(new AppSettings { BrowserPreference = SmokeBrowser.Preference, VideoUrl = Example, SelectedVideoLibraryId = null, HotkeysEnabled = false }, profile, enableWarmup: true, profileFor: _ => profile))
+        var window = new MainWindow(new AppServices(new AppSettings { IsFirstLaunch = false, BrowserPreference = SmokeBrowser.Preference, VideoUrl = Example, SelectedVideoLibraryId = null, HotkeysEnabled = false }, profile, enableWarmup: true, profileFor: _ => profile))
             { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
         var heartbeat = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(25) };
         var stolen = false;
@@ -229,7 +229,7 @@ internal static class LatencyTests
     {
         var measurement = new Measurement("prewarm-only-exit");
         results.Add(measurement);
-        var services = new AppServices(new AppSettings { BrowserPreference = SmokeBrowser.Preference, VideoUrl = "", SelectedVideoLibraryId = null, HotkeysEnabled = false }, profile, enableWarmup: true, profileFor: _ => profile);
+        var services = new AppServices(new AppSettings { IsFirstLaunch = false, BrowserPreference = SmokeBrowser.Preference, VideoUrl = "", SelectedVideoLibraryId = null, HotkeysEnabled = false }, profile, enableWarmup: true, profileFor: _ => profile);
         var window = new MainWindow(services) { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
         try
         {
@@ -289,7 +289,7 @@ internal static class LatencyTests
     }
 
     private static MainWindow CreateWindow(string profile, IBrowserSession browser, IEpisodeProvider episodes, IVideoPlayer video, string url = Example, bool prewarm = false) =>
-        new(new AppServices(new AppSettings { BrowserPreference = SmokeBrowser.Preference, VideoUrl = url, SelectedVideoLibraryId = null, HotkeysEnabled = false },
+        new(new AppServices(new AppSettings { IsFirstLaunch = false, BrowserPreference = SmokeBrowser.Preference, VideoUrl = url, SelectedVideoLibraryId = null, HotkeysEnabled = false },
             profile, browser: browser, episodes: episodes, video: video, enableWarmup: prewarm))
         { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual };
 

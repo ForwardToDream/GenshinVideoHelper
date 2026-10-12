@@ -8,7 +8,7 @@ $destination = Join-Path $artifacts 'GenshinVideoHelper'
 $staging = Join-Path $artifacts ('publish-' + [guid]::NewGuid().ToString('N'))
 $archive = Join-Path $artifacts 'GenshinVideoHelper-win-x64.zip'
 try {
-    dotnet publish (Join-Path $taskRoot 'src/GenshinVideoHelper.App/GenshinVideoHelper.App.csproj') -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=embedded -p:DebugSymbols=false -o $staging
+    dotnet publish (Join-Path $taskRoot 'src/GenshinVideoHelper.App/GenshinVideoHelper.App.csproj') -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=embedded -p:DebugSymbols=false -o $staging
     if ($LASTEXITCODE -ne 0) { throw "发布失败，退出码 $LASTEXITCODE" }
     $exe = Join-Path $staging 'GenshinVideoHelper.exe'
     if (!(Test-Path -LiteralPath $exe)) { throw '未生成 exe。' }
@@ -28,7 +28,8 @@ try {
         $_.Name -in @('GenshinVideoHelper.deps.json', 'GenshinVideoHelper.runtimeconfig.json')
     } | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
     Write-Host "版本：$releaseVersion"
-    Write-Host "可直接运行：$(Join-Path $destination 'GenshinVideoHelper.exe')"
+    Write-Host "exe：$(Join-Path $destination 'GenshinVideoHelper.exe')（$([Math]::Round((Get-Item -LiteralPath $exe).Length / 1MB, 1)) MiB）"
+    Write-Host '运行要求：.NET 8 Desktop Runtime（Windows x64）。'
     Write-Host "分发包：$archive"
 }
 finally {

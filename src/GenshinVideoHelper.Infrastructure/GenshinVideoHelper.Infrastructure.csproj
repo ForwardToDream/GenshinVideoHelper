@@ -7,8 +7,8 @@
     <ProjectReference Include="../GenshinVideoHelper.Core/GenshinVideoHelper.Core.csproj" />
     <EmbeddedResource Include="Browser/VideoControl.js" />
     <EmbeddedResource Include="Browser/VideoFrameCapture.js" />
-    <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
-    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.11.0.20250507" />
+    <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
+    <PackageReference Include="OpenCvSharp4.runtime.win.slim" Version="4.13.0.20260627" />
     <EmbeddedResource Include="Library/Data/*.json" LogicalName="GenshinVideoHelper.VideoLibraries.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

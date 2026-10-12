@@ -6,6 +6,15 @@ namespace GenshinVideoHelper.Core.Tests.Settings;
 public sealed class SettingsTests
 {
     [Fact]
+    public void Defaults_FirstLaunch_UsesManualInput()
+    {
+        var settings = new AppSettings();
+        Assert.True(settings.IsFirstLaunch);
+        Assert.Null(settings.SelectedVideoLibraryId);
+        Assert.Empty(settings.VideoUrl);
+    }
+
+    [Fact]
     public void Normalize_NullUrlAndOutOfRangeValues_UsesValidDefaults()
     {
         var settings = new AppSettings { VideoUrl = null!, SeekSeconds = 200, PipWidth = 1, PipMargin = -2, Hotkeys = null! };

@@ -31,7 +31,7 @@ internal static class BrowserSwitchTests
         using var temporary = TestArtifacts.CreateTemp(root, "browser-switch");
         var data = Path.Combine(temporary.Path, ".gvh");
         var store = new JsonSettingsStore(Path.Combine(data, "config.json"));
-        var settings = new AppSettings { BrowserPreference = BrowserPreference.Chrome, HotkeysEnabled = false,
+        var settings = new AppSettings { IsFirstLaunch = false, BrowserPreference = BrowserPreference.Chrome, HotkeysEnabled = false,
             SelectedVideoLibraryId = null, VideoUrl = new VideoIdentity("BV1MXfEY4EQ2", 2).Url,
             PipLayout = new(.25, 16d / 9, .1, .1) };
         settings.Vision.Enabled = false;

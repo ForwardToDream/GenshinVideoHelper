@@ -5,7 +5,8 @@ public sealed class AppSettings
     public Models.BrowserPreference BrowserPreference { get; set; } = Models.BrowserPreference.Auto;
     public Vision.VisionSettings Vision { get; set; } = new();
     public string VideoUrl { get; set; } = "";
-    public string? SelectedVideoLibraryId { get; set; } = Library.VideoLibraryCatalog.DefaultLibraryId;
+    public string? SelectedVideoLibraryId { get; set; }
+    public bool IsFirstLaunch { get; set; } = true;
     public int SeekSeconds { get; set; } = 5;
     /// <summary>Video width share expressed against a 1920-unit reference work area.</summary>
     public int PipWidth { get; set; } = 420;

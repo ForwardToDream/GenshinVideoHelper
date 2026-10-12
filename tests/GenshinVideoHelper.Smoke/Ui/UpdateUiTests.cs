@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using GenshinVideoHelper.App;
 using GenshinVideoHelper.App.Composition;
@@ -14,20 +15,24 @@ internal static class UpdateUiTests
     public static void Run(string root)
     {
         var dispatcher = Application.Current.Dispatcher;
-        var task = dispatcher.InvokeAsync(() => RunAsync(root)).Task.Unwrap();
         var frame = new DispatcherFrame();
-        task.ContinueWith(_ => dispatcher.BeginInvoke(() => frame.Continue = false));
+        var task = dispatcher.InvokeAsync(async () =>
+        {
+            try { await RunAsync(root); }
+            finally { frame.Continue = false; }
+        }).Task.Unwrap();
         Dispatcher.PushFrame(frame);
         task.GetAwaiter().GetResult();
     }
 
     private static async Task RunAsync(string root)
     {
+        Console.WriteLine("Update UI: preparing startup check.");
         var assembly = typeof(MainWindow).Assembly.GetName().Version!;
         var current = new Version(assembly.Major, assembly.Minor, assembly.Build);
         var newer = new Version(current.Major, current.Minor + 1, 0);
         var checker = new Checker { Result = new(newer, new("https://github.com/ForwardToDream/GenshinVideoHelper/releases")) };
-        var window = new MainWindow(new AppServices(new AppSettings { HotkeysEnabled = false },
+        var window = new MainWindow(new AppServices(new AppSettings { IsFirstLaunch = false, HotkeysEnabled = false },
             TestArtifacts.PathFor(root, "update-ui"), episodeFactory: PreviewService, updateFactory: () => checker))
             { ShowActivated = false, ShowInTaskbar = false };
         var retry = (Button)window.FindName("CheckUpdateButton");
@@ -35,12 +40,22 @@ internal static class UpdateUiTests
         var state = (TextBlock)window.FindName("UpdateStateText");
         try
         {
+            Console.WriteLine("Update UI: showing the window.");
             window.Show();
             await Until(() => checker.Calls == 1 && retry.IsEnabled, "Startup checks updates without waiting for a browser");
+            Console.WriteLine("Update UI: checking footer layout.");
             Check(checker.Current == current && ((TextBlock)window.FindName("VersionText")).Text == $"v{current}", "Update comparison uses the displayed executable version");
-            Check(notice.Visibility == Visibility.Visible && notice.Content.ToString()!.Contains(newer.ToString()), "New release appears as a nonmodal footer action");
+            Check(notice.Visibility == Visibility.Visible && (string)notice.Content == "可更新" && notice.ToolTip.ToString()!.Contains(newer.ToString()), "New release uses only small footer text with version details in its tooltip");
+            window.UpdateLayout();
+            var color = ((SolidColorBrush)notice.Foreground).Color;
+            var version = (TextBlock)window.FindName("VersionText");
+            var content = (FrameworkElement)window.Content;
+            Check(color.R > color.G && color.R > color.B && notice.ActualWidth < 50 && notice.ActualHeight < 24 &&
+                notice.TranslatePoint(new Point(notice.ActualWidth, 0), content).X < version.TranslatePoint(new Point(), content).X,
+                "Red update text stays small and sits to the left of the version without overlap");
             Check(window.Services.Follow.Session.Current is null, "Update notification does not open or change a video session");
             Capture(window, root, "ui-update-notice.png", 1020, 730);
+            Capture(window, root, "ui-update-notice-compact.png", 860, 600);
             window.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
             Check(checker.Calls == 1, "Repeated Loaded events do not repeat the startup check");
 
@@ -81,6 +96,11 @@ internal static class UpdateUiTests
             retry.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Check(notice.Visibility == Visibility.Visible, "Retry after a network failure restores a new-release notice");
             Capture(window, root, "ui-update-settings-compact.png", 860, 600);
+
+            checker.Failure = new System.Net.Http.HttpRequestException("offline after finding a release");
+            retry.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check(notice.Visibility == Visibility.Collapsed, "A failed check clears previously shown update text");
+            checker.Failure = null;
 
             checker.Pending = new(TaskCreationOptions.RunContinuationsAsynchronously);
             retry.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

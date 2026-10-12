@@ -26,7 +26,7 @@ internal static class LoginTests
     {
         var browser = new Browser();
         var video = new Player();
-        var services = new AppServices(new AppSettings { HotkeysEnabled = false, SelectedVideoLibraryId = null, VideoUrl = "" },
+        var services = new AppServices(new AppSettings { IsFirstLaunch = false, HotkeysEnabled = false, SelectedVideoLibraryId = null, VideoUrl = "" },
             TestArtifacts.PathFor(root, "login-profile"), browser: browser, video: video, episodeFactory: PreviewService);
         var window = new MainWindow(services) { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
         window.Show();

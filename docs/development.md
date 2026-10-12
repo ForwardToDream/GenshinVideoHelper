@@ -109,7 +109,8 @@ Chrome 与 Edge 共用 CDP、媒体命令、登录检查、高清采集及浮窗
 | 配置字段 | 默认 / 范围 |
 | --- | --- |
 | `BrowserPreference` | `Auto`；可选 `Chrome`、`Edge` |
-| `SelectedVideoLibraryId` | `hanqing-zero-start`；`null` 表示手动模式 |
+| `SelectedVideoLibraryId` | `null`；默认手动输入，选库后保存库 ID |
+| `IsFirstLaunch` | `true`；首次显示选库提示后保存为 `false`，关闭提示也不再弹出 |
 | `VideoUrl` | 空；记录最近选择，不是独立“默认视频”功能 |
 | `SeekSeconds` | 5；归一化到 1–60 |
 | `PipWidth`、`PipMargin` | 420 / 20；280–800 / 0–100 |

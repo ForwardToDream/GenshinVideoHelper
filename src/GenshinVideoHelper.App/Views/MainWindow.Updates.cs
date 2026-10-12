@@ -44,14 +44,19 @@ public partial class MainWindow
             if (_closing) return;
             _availableUpdate = update;
             UpdateNoticeButton.Visibility = update is null ? Visibility.Collapsed : Visibility.Visible;
-            UpdateNoticeButton.Content = update is null ? "" : $"发现新版本 {update.Version} · 查看更新";
+            UpdateNoticeButton.ToolTip = update is null ? null : $"发现新版本 {update.Version}，点击打开下载页。";
             UpdateStateText.Text = update is null ? "暂无新版本" : $"发现新版本 {update.Version}，点击下载页手动更新。";
             AppLog.Info("Update", update is null ? "未发现新版本。" : $"发现新版本 {update.Version}。");
         }
         catch (OperationCanceledException) when (_updateLifetime.IsCancellationRequested) { }
         catch (Exception ex)
         {
-            if (!_closing) UpdateStateText.Text = "暂时无法检查更新，可稍后重试。";
+            if (!_closing)
+            {
+                _availableUpdate = null;
+                UpdateNoticeButton.Visibility = Visibility.Collapsed;
+                UpdateStateText.Text = "暂时无法检查更新，可稍后重试。";
+            }
             AppLog.Warn("Update", "更新检查未完成。", ex);
         }
         finally

@@ -29,7 +29,7 @@ internal static class BrowserUiTests
 
     public static void Run(string root)
     {
-        var settings = new AppSettings { HotkeysEnabled = false };
+        var settings = new AppSettings { IsFirstLaunch = false, HotkeysEnabled = false };
         var store = new Store();
         var both = new Catalog([new(BrowserKind.Chrome, @"C:\Program Files\Google\Chrome\Application\chrome.exe", "155.0.0.1"),
             new(BrowserKind.Edge, @"C:\Users\developer\AppData\Local\Microsoft\Edge\Application\msedge.exe", "155.0.0.2")]);
@@ -53,7 +53,7 @@ internal static class BrowserUiTests
         manager.CloseAsync().GetAwaiter().GetResult();
         window.Close();
 
-        var missingSettings = new AppSettings { HotkeysEnabled = false, BrowserPreference = BrowserPreference.Edge };
+        var missingSettings = new AppSettings { IsFirstLaunch = false, HotkeysEnabled = false, BrowserPreference = BrowserPreference.Edge };
         var missing = new MainWindow(new AppServices(missingSettings, TestArtifacts.PathFor(root, "browser-ui-missing"),
             browserCatalog: new Catalog([]), episodeFactory: PreviewService));
         ((RadioButton)missing.FindName("NavSettings")).IsChecked = true;

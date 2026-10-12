@@ -41,7 +41,7 @@ internal static class PreviewTests
     {
         var library = VideoLibraryLoader.LoadBuiltIn().Libraries.Single(library => library.Id == VideoLibraryCatalog.DefaultLibraryId);
         var handler = new PreviewHandler();
-        var settings = new AppSettings { HotkeysEnabled = false };
+        var settings = new AppSettings { IsFirstLaunch = false, HotkeysEnabled = false, SelectedVideoLibraryId = library.Id };
         var window = new GenshinVideoHelper.App.MainWindow(new AppServices(settings, TestArtifacts.PathFor(root, "preview-test-profile"), episodeFactory: () => new BilibiliEpisodeService(handler)));
         var url = (TextBox)window.FindName("UrlInput");
         var maps = (ComboBox)window.FindName("GuideVideoSelector");
@@ -101,7 +101,7 @@ internal static class PreviewTests
             Check(handler.Requests.Last().Token.IsCancellationRequested, "Closing window cancels preview");
         }
         finally { window.Close(); await window.ShutdownCompletion; }
-        var restored = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { HotkeysEnabled = false, VideoUrl = library.Videos[8].Url.Replace("?p=1", "?p=3") }, TestArtifacts.PathFor(root, "preview-test-profile"), episodeFactory: PreviewService));
+        var restored = new GenshinVideoHelper.App.MainWindow(new AppServices(new AppSettings { IsFirstLaunch = false, HotkeysEnabled = false, SelectedVideoLibraryId = library.Id, VideoUrl = library.Videos[8].Url.Replace("?p=1", "?p=3") }, TestArtifacts.PathFor(root, "preview-test-profile"), episodeFactory: PreviewService));
         try
         {
             await Until(() => ((ComboBox)restored.FindName("EpisodeSelector")).Items.Count == 4, "Restore preloads saved in-library part");

@@ -13,6 +13,7 @@ public partial class MainWindow
 
     private void InitializeLibraries()
     {
+        ContentRendered += FirstLaunch_ContentRendered;
         _updatingLibraryControls = true;
         try
         {
@@ -36,6 +37,7 @@ public partial class MainWindow
         _activeLibrary = library;
         GuideVideoSelector.ItemsSource = library?.Videos ?? [];
         GuideVideoSelector.IsEnabled = library is not null;
+        GuideVideoSelector.Visibility = library is null ? Visibility.Collapsed : Visibility.Visible;
         SyncGuideVideoSelection();
         LibrarySummaryText.Text = library?.DisplayName ?? "手动输入攻略链接";
         LibraryVideoCountText.Text = library is null ? "" : $"{library.Videos.Count} 个视频";
@@ -57,7 +59,7 @@ public partial class MainWindow
         }
         finally { _updatingLibraryControls = false; }
         PrepareEpisodePreview(immediate: true);
-        SetStatus(library is null ? "已切换为手动输入，当前视频继续播放。" : $"已选择 {library.DisplayName}，候选列表已更新。");
+        SetStatus(library is null ? "已切换为手动输入，可在地址框输入攻略链接。" : $"已选择 {library.DisplayName}，候选列表已更新。");
         return true;
     }
 
@@ -92,5 +94,16 @@ public partial class MainWindow
     {
         var picker = new LibraryPickerWindow(_libraryCatalog, _settings.SelectedVideoLibraryId) { Owner = this };
         if (picker.ShowDialog() == true) SelectLibrary(picker.SelectedLibrary);
+    }
+
+    private void FirstLaunch_ContentRendered(object? sender, EventArgs e)
+    {
+        ContentRendered -= FirstLaunch_ContentRendered;
+        if (_closing || !_settings.IsFirstLaunch) return;
+        _settings.IsFirstLaunch = false;
+        SaveSettings();
+        var picker = new LibraryPickerWindow(_libraryCatalog, null, firstLaunch: true) { Owner = this };
+        var selected = picker.ShowDialog() == true ? picker.SelectedLibrary : null;
+        if (!_closing) SelectLibrary(selected);
     }
 }
