@@ -8,10 +8,17 @@ $destination = Join-Path $artifacts 'GenshinVideoHelper'
 $staging = Join-Path $artifacts ('publish-' + [guid]::NewGuid().ToString('N'))
 $archive = Join-Path $artifacts 'GenshinVideoHelper-win-x64.zip'
 try {
-    dotnet publish (Join-Path $taskRoot 'src/GenshinVideoHelper.App/GenshinVideoHelper.App.csproj') -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=embedded -p:DebugSymbols=false -o $staging
+    dotnet publish (Join-Path $taskRoot 'src/GenshinVideoHelper.App/GenshinVideoHelper.App.csproj') -c Release -r win-x64 --self-contained false -p:CompressDependencies=true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o $staging
     if ($LASTEXITCODE -ne 0) { throw "发布失败，退出码 $LASTEXITCODE" }
     $exe = Join-Path $staging 'GenshinVideoHelper.exe'
     if (!(Test-Path -LiteralPath $exe)) { throw '未生成 exe。' }
+    $project = [xml](Get-Content -LiteralPath (Join-Path $taskRoot 'src/GenshinVideoHelper.App/GenshinVideoHelper.App.csproj') -Raw)
+    $targetFramework = [string]($project.Project.PropertyGroup.TargetFramework | Where-Object { $_ } | Select-Object -First 1)
+    $assembly = Join-Path $taskRoot "src/GenshinVideoHelper.App/bin/Release/$targetFramework/win-x64/GenshinVideoHelper.dll"
+    dotnet run --project (Join-Path $taskRoot 'tests/GenshinVideoHelper.PackageTests') -c Release -- $taskRoot $assembly $exe
+    if ($LASTEXITCODE -ne 0) { throw '压缩依赖或 .NET 安装入口验证失败。' }
+    $files = @(Get-ChildItem -LiteralPath $staging -File | Sort-Object Name)
+    if (($files.Name -join ',') -cne 'GenshinVideoHelper.exe,LICENSE,README.md' -or (Get-ChildItem -LiteralPath $staging -Directory).Count) { throw '发布包必须只有 exe、README 和 LICENSE。' }
     $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($exe)
     if ("$($info.FileMajorPart).$($info.FileMinorPart).$($info.FileBuildPart)" -cne $releaseVersion -or $info.FilePrivatePart -ne 0) {
         throw 'exe 版本与源码不一致。'

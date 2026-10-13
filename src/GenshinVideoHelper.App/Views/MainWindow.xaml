@@ -99,7 +99,64 @@
            <TextBlock Text="{Binding DisplayText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DisplayText}" />
           </DockPanel></DataTemplate></ComboBox.ItemTemplate>
          </ComboBox>
-         <TextBox x:Name="UrlInput" Height="36" KeyDown="UrlInput_KeyDown" TextChanged="UrlInput_TextChanged" ToolTip="直接清空或改写链接即可自行输入；支持 BV 号和 ?p=3，自动读取分集" />
+         <Grid x:Name="UrlInputArea" PreviewKeyDown="LinkHistory_PreviewKeyDown">
+          <TextBox x:Name="UrlInput" Height="36" KeyDown="UrlInput_KeyDown" TextChanged="UrlInput_TextChanged" ToolTip="直接清空或改写链接即可自行输入；支持 BV 号和 ?p=3，自动读取分集" />
+          <ToggleButton x:Name="LinkHistoryToggle" Width="34" Margin="0,2,2,2" HorizontalAlignment="Right" Cursor="Hand"
+                        IsChecked="{Binding IsOpen, ElementName=LinkHistoryPopup, Mode=TwoWay}" ClickMode="Press"
+                        ToolTip="手动输入的跟随历史" AutomationProperties.Name="展开跟随历史">
+           <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
+            <Border x:Name="ToggleBorder" Background="Transparent" CornerRadius="3">
+             <TextBlock Style="{StaticResource Symbol}" Text="&#xE70D;" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" HorizontalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ToggleBorder" Property="Background" Value="{StaticResource HoverBrush}" /></Trigger>
+             <Trigger Property="IsChecked" Value="True"><Setter TargetName="ToggleBorder" Property="Background" Value="{StaticResource SelectedBrush}" /></Trigger>
+             <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="ToggleBorder" Property="Background" Value="{StaticResource HoverBrush}" /></Trigger>
+            </ControlTemplate.Triggers>
+           </ControlTemplate></ToggleButton.Template>
+          </ToggleButton>
+          <Popup x:Name="LinkHistoryPopup" PlacementTarget="{Binding ElementName=UrlInputArea}" Placement="Bottom" VerticalOffset="4"
+                 StaysOpen="False" AllowsTransparency="True" Opened="LinkHistoryPopup_Opened" Closed="LinkHistoryPopup_Closed">
+           <Popup.Resources>
+            <Style x:Key="HistoryLinkButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+             <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+             <Setter Property="Padding" Value="10,8" /><Setter Property="MinHeight" Value="36" /><Setter Property="HorizontalContentAlignment" Value="Left" />
+             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+              <Border x:Name="LinkBorder" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" CornerRadius="3">
+               <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
+              </Border>
+              <ControlTemplate.Triggers>
+               <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="LinkBorder" Property="Background" Value="{StaticResource HoverBrush}" /></Trigger>
+               <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="LinkBorder" Property="Background" Value="{StaticResource SelectedBrush}" /></Trigger>
+              </ControlTemplate.Triggers>
+             </ControlTemplate></Setter.Value></Setter>
+            </Style>
+           </Popup.Resources>
+           <Border Width="{Binding ActualWidth, ElementName=UrlInputArea}" Background="White" BorderBrush="{StaticResource InputBorderBrush}" BorderThickness="1" CornerRadius="4" Padding="4" PreviewKeyDown="LinkHistory_PreviewKeyDown">
+            <StackPanel>
+             <TextBlock Text="跟随历史 · 最近优先" Style="{StaticResource SecondaryText}" Margin="10,6,10,4" />
+             <ListBox x:Name="LinkHistoryList" Style="{StaticResource LibraryPickerList}" MaxHeight="260" KeyboardNavigation.TabNavigation="Continue" AutomationProperties.Name="手动跟随链接历史">
+              <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem" BasedOn="{StaticResource CompactListItem}">
+               <Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,2" />
+              </Style></ListBox.ItemContainerStyle>
+              <ListBox.ItemTemplate><DataTemplate><Grid>
+               <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="38" /></Grid.ColumnDefinitions>
+               <Button Style="{StaticResource HistoryLinkButton}" Click="HistorySelect_Click" ToolTip="{Binding Detail}" AutomationProperties.Name="{Binding Url}">
+                <TextBlock Text="{Binding Url}" TextTrimming="CharacterEllipsis" />
+               </Button>
+               <Button Grid.Column="1" Click="HistoryDelete_Click" ToolTip="{Binding DeleteHint}" AutomationProperties.Name="{Binding DeleteHint}" Padding="0" MinHeight="28" Margin="2,3" Background="Transparent" BorderThickness="0">
+                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource SmallSubtleButton}">
+                 <Style.Triggers><DataTrigger Binding="{Binding DeleteHint}" Value="确认删除"><Setter Property="Foreground" Value="{StaticResource WarningBrush}" /></DataTrigger></Style.Triggers>
+                </Style></Button.Style>
+                <TextBlock Style="{StaticResource Symbol}" Text="{Binding DeleteGlyph}" FontSize="15" />
+               </Button>
+              </Grid></DataTemplate></ListBox.ItemTemplate>
+             </ListBox>
+             <TextBlock x:Name="LinkHistoryEmpty" Text="暂无手动跟随记录" Style="{StaticResource SecondaryText}" Margin="10,10,10,12" />
+            </StackPanel>
+           </Border>
+          </Popup>
+         </Grid>
          <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
           <ComboBox x:Name="EpisodeSelector" MinWidth="100" IsEnabled="False" SelectionChanged="EpisodeSelector_SelectionChanged" ToolTip="开始前可预选分 P；跟随当前视频时直接切换分集"><ComboBox.ItemTemplate><DataTemplate><DockPanel>
            <TextBlock DockPanel.Dock="Right" Margin="10,0,0,0" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}"><TextBlock.Text><MultiBinding Converter="{StaticResource ProgressLookup}"><Binding /><Binding Source="{StaticResource ProgressLookup}" Path="Version" /></MultiBinding></TextBlock.Text></TextBlock>

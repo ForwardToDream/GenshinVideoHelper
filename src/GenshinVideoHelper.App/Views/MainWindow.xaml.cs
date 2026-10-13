@@ -99,6 +99,7 @@ public partial class MainWindow : Window
 
     private void ShowPage(string key)
     {
+        LinkHistoryPopup.IsOpen = false;
         PagesHost.MinWidth = key == "Progress" ? 620 : 480;
         PageViewport.ScrollToHorizontalOffset(0);
         FollowPage.Visibility = key == "Follow" ? Visibility.Visible : Visibility.Collapsed;
@@ -195,10 +196,15 @@ public partial class MainWindow : Window
         if (_selectedInfo?.Bvid == identity.Bvid && !_selectedInfo.Episodes.Any(p => p.Number == identity.Part))
         { SetStatus($"此视频没有 P{identity.Part}，请选择有效分集。", true); return; }
         AppLog.Info("App", $"用户开始跟随 {identity.Bvid} P{identity.Part}。");
+        // Capture the mode at the click: changing libraries while opening must not change its origin.
+        var manual = _settings.SelectedVideoLibraryId is null;
         var loginIntent = ++_loginIntent;
         await Services.Follow.OpenAsync(identity);
         if (loginIntent == _loginIntent && Services.Follow.Session.Current is { } request && request.Identity == identity && request.TargetId.Length > 0)
+        {
+            if (manual && !_closing) RememberManualFollow(identity);
             _ = CheckLoginAsync(request);
+        }
         await PollAsync();
     }
     private async void UrlInput_KeyDown(object sender, KeyEventArgs e)
@@ -418,6 +424,7 @@ public partial class MainWindow : Window
         if (_shutdownComplete) return;
         if (_closing) { e.Cancel = true; return; }
         _closing = true;
+        LinkHistoryPopup.IsOpen = false;
         StopUpdates();
         _loginPrompt?.Close();
         AppLog.Info("App", "开始退出。");

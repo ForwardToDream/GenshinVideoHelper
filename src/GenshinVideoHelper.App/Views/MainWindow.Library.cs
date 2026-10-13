@@ -35,6 +35,7 @@ public partial class MainWindow
     private void PopulateLibrary(VideoLibrary? library)
     {
         _activeLibrary = library;
+        UpdateHistoryAvailability();
         GuideVideoSelector.ItemsSource = library?.Videos ?? [];
         GuideVideoSelector.IsEnabled = library is not null;
         GuideVideoSelector.Visibility = library is null ? Visibility.Collapsed : Visibility.Visible;

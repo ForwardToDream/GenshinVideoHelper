@@ -2,9 +2,11 @@
 
 [文档目录](README.md) · [测试](testing.md)
 
-发布 **Windows x64 压缩单文件 exe**，不内置 .NET。用户安装 **.NET 8 Desktop Runtime x64**，无需 SDK。GitHub 只上传 `GenshinVideoHelper.exe`；源码由对应标签提供。
+发布 **Windows x64 单文件 exe**，不内置 .NET。用户安装 **.NET 8 Desktop Runtime x64**，无需 SDK。GitHub 只上传 `GenshinVideoHelper.exe`；源码由对应标签提供。
 
-`publish.ps1` 使用 `--self-contained false` 与 `EnableCompressionInSingleFile=true`，依赖系统共享运行时。OpenCV 使用同版本托管包与 `runtime.win.slim`，保留 ORB、图像处理和几何估计，不打包视频解码模块。WPF 不启用裁剪；发布后验证单独 exe 的启动和 CV 回归。[微软单文件说明](https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview)。
+`publish.ps1` 使用 `--self-contained false`，依赖系统共享运行时。发布时用 Costura 压缩嵌入依赖，再由 SDK 打成一个 exe；不生成第二个 exe。托管依赖从内存加载，原生 OpenCV 缓存 DLL 后加载。普通开发构建不启用此流程。WPF 不裁剪；OpenCV 使用 `runtime.win.slim`，保留 ORB、图像处理和几何估计。[单文件说明](https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview)、[Costura](https://github.com/Fody/Costura)。
+
+缺少桌面运行时时，由 exe 的原生 .NET apphost 显示安装提示并打开微软下载页，无需先加载 C#。App 的运行时入口为 `Microsoft.WindowsDesktop.App`，由桌面运行时解析 Core 依赖，缺框架提示直接指向 Desktop Runtime。安装后用户重新启动；不自动安装。Release 说明附下载入口。[启动提示](https://learn.microsoft.com/en-us/dotnet/core/runtime-discovery/troubleshoot-app-launch)。
 
 ## 版本
 
@@ -20,6 +22,8 @@
 ```
 
 exe 位于 `artifacts/GenshinVideoHelper/GenshinVideoHelper.exe`。本地脚本仍生成 zip 便于测试；GitHub 不上传它。按改动补跑专项，验证单独 exe 的启动、退出与使用说明。目标目录已有 `.gvh/` 保留，用户数据不上传。
+
+发布脚本先运行 `GenshinVideoHelper.PackageTests`：隔离加载压缩依赖、原生 OpenCV、真实图片 ORB，以及缺少 .NET / Desktop Runtime 时的原生安装入口。失败不覆盖现有发布包；检查包内只有 exe、README 和 LICENSE。
 
 ## 上传草稿
 

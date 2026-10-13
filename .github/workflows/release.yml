@@ -58,5 +58,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create $env:RELEASE_TAG artifacts/GenshinVideoHelper/GenshinVideoHelper.exe --repo $env:GITHUB_REPOSITORY --verify-tag --draft --title $env:RELEASE_TAG --generate-notes
+          $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          '运行前安装 [.NET 8 Desktop Runtime（Windows x64）](https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0)。' | Set-Content -LiteralPath $notesPath -Encoding utf8
+          gh release create $env:RELEASE_TAG artifacts/GenshinVideoHelper/GenshinVideoHelper.exe --repo $env:GITHUB_REPOSITORY --verify-tag --draft --title $env:RELEASE_TAG --notes-file $notesPath --generate-notes
           if ($LASTEXITCODE -ne 0) { throw 'Release 草稿创建失败；不覆盖已有版本。' }

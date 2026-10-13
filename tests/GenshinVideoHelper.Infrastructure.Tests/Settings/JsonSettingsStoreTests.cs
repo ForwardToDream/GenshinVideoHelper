@@ -79,6 +79,33 @@ public sealed class JsonSettingsStoreTests : IDisposable
         Assert.Equal(10, settings.SeekSeconds);
     }
 
+    [Theory]
+    [InlineData("{}")] [InlineData("{\"ManualFollowHistory\":null}")]
+    public void Load_MissingOrNullHistory_DefaultsToEmpty(string json)
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(PathFor(), json);
+        Assert.Empty(new JsonSettingsStore(PathFor()).Load().Settings.ManualFollowHistory);
+    }
+
+    [Fact]
+    public void ManualFollowHistory_RoundTripsTimesAndConfirmedDeletion()
+    {
+        var store = new JsonSettingsStore(PathFor());
+        var settings = store.Load().Settings;
+        var first = new VideoIdentity("BV1hjgG6jEa6", 3);
+        var second = new VideoIdentity("BV1E9duBYEBV", 1);
+        var at = new DateTimeOffset(2026, 10, 13, 9, 0, 0, TimeSpan.Zero);
+        settings.ManualFollowHistory = FollowLinkHistory.Remember(settings.ManualFollowHistory, first, at);
+        settings.ManualFollowHistory = FollowLinkHistory.Remember(settings.ManualFollowHistory, second, at.AddMinutes(1));
+        store.Save(settings);
+        var loaded = new JsonSettingsStore(PathFor()).Load().Settings;
+        Assert.Equal(settings.ManualFollowHistory, loaded.ManualFollowHistory);
+        loaded.ManualFollowHistory.RemoveAt(0);
+        store.Save(loaded);
+        Assert.Equal(first.Url, Assert.Single(new JsonSettingsStore(PathFor()).Load().Settings.ManualFollowHistory).Url);
+    }
+
     [Fact]
     public void Load_NullUrl_NormalizesWithoutCrashing()
     {

@@ -10,7 +10,17 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>GenshinVideoHelper</AssemblyName>
+    <!-- 原生安装入口指向桌面运行时；其配置会解析 Core 依赖。 -->
+    <AlwaysIncludeCoreFrameworkInRuntimeConfig>false</AlwaysIncludeCoreFrameworkInRuntimeConfig>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(CompressDependencies)' == 'true'">
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <FodyGenerateXsd>false</FodyGenerateXsd>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(CompressDependencies)' == 'true'">
+    <PackageReference Include="Fody" Version="6.9.3" PrivateAssets="all" />
+    <PackageReference Include="Costura.Fody" Version="6.2.0" PrivateAssets="all" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Vortice.Direct3D11" Version="3.6.2" />
     <Using Remove="System.Windows.Forms" />
@@ -21,4 +31,9 @@
     <Content Include="../../README.md" Link="README.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="RemoveEmbeddedDependenciesFromPublish" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(CompressDependencies)' == 'true'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Extension)' == '.dll' and '%(Filename)' != '$(AssemblyName)'" />
+    </ItemGroup>
+  </Target>
 </Project>

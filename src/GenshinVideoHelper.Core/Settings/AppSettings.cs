@@ -5,6 +5,7 @@ public sealed class AppSettings
     public Models.BrowserPreference BrowserPreference { get; set; } = Models.BrowserPreference.Auto;
     public Vision.VisionSettings Vision { get; set; } = new();
     public string VideoUrl { get; set; } = "";
+    public List<FollowLinkEntry> ManualFollowHistory { get; set; } = [];
     public string? SelectedVideoLibraryId { get; set; }
     public bool IsFirstLaunch { get; set; } = true;
     public int SeekSeconds { get; set; } = 5;
@@ -29,6 +30,7 @@ public sealed class AppSettings
         PipMargin = Math.Clamp(PipMargin, 0, 100);
         if (PipLayout is { IsValid: false }) PipLayout = null;
         if (!Models.VideoIdentity.TryParse(VideoUrl, out _)) VideoUrl = "";
+        ManualFollowHistory = FollowLinkHistory.Normalize(ManualFollowHistory);
         Hotkeys = HotkeyBindings.Validate(Hotkeys ?? HotkeyBindings.Defaults());
     }
 }
