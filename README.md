@@ -77,6 +77,7 @@
 
 ## 致谢与许可
 
-[BetterGI](https://github.com/babalae/better-genshin-impact)（视觉与项目组织参考） · [PCL](https://github.com/Meloong-Git/PCL)（界面参考） · 汉卿导航（内置攻略库）。
+[BetterGI](https://github.com/babalae/better-genshin-impact)（视觉与项目组织参考）
+[PCL](https://github.com/Meloong-Git/PCL)（界面参考）
 
 [GPL-3.0](LICENSE)。

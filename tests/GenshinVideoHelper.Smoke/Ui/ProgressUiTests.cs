@@ -1,7 +1,11 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Threading;
+using GenshinVideoHelper.App.Composition;
+using GenshinVideoHelper.Core.Settings;
 using GenshinVideoHelper.App.Controls;
 using GenshinVideoHelper.Core.Models;
 using GenshinVideoHelper.Core.Library;
@@ -13,6 +17,27 @@ namespace GenshinVideoHelper.Smoke;
 /// <summary>The progress page driven through its real controls, against the fixture episode list.</summary>
 internal static class ProgressUiTests
 {
+    public static void RunStandalone(string root)
+    {
+        var app = CreateTestApplication();
+        var work = app.Dispatcher.InvokeAsync(() =>
+        {
+            var settings = new AppSettings { IsFirstLaunch = false, HotkeysEnabled = false,
+                SelectedVideoLibraryId = VideoLibraryCatalog.DefaultLibraryId };
+            settings.Vision.Enabled = false;
+            var window = new GenshinVideoHelper.App.MainWindow(new AppServices(settings,
+                TestArtifacts.PathFor(root, "progress-ui"), episodeFactory: PreviewService))
+                { ShowActivated = false, ShowInTaskbar = false };
+            try { window.Show(); Run(window, root); }
+            finally { window.Close(); PumpUntil(window, () => window.ShutdownCompletion.IsCompleted, "Progress UI shutdown"); }
+        }).Task;
+        var frame = new DispatcherFrame();
+        work.ContinueWith(_ => app.Dispatcher.BeginInvoke(() => frame.Continue = false));
+        Dispatcher.PushFrame(frame);
+        try { work.GetAwaiter().GetResult(); }
+        finally { app.Shutdown(); }
+    }
+
     public static void Run(GenshinVideoHelper.App.MainWindow window, string root)
     {
         var progress = window.Services.Progress;
@@ -37,6 +62,7 @@ internal static class ProgressUiTests
               videos.Items.Cast<object>().Skip(library.Videos.Count).All(row => Text(row, "Group") == "其他视频"), "Progress page lists every map of the library first, other videos after");
         PumpUntil(window, () => library.Videos.All(video => progress.Get(video.Bvid) is { PartsKnown: true }), "Parts of every map are read in the background");
         Check(Find<TextBlock>("ProgressTotalText").Text == $"已完成 0 / {library.Videos.Count * 4} 集", "Overview counts every known part");
+        CheckVideoScrolling(window, root);
 
         videos.SelectedIndex = 5;
         Check(episodes.Items.Count == 4 && Find<TextBlock>("ProgressVideoTitle").Text == map.DisplayText, "Selecting a map shows its parts");
@@ -131,6 +157,43 @@ internal static class ProgressUiTests
         progress.Undo();
         url.Text = previousUrl;
         Console.WriteLine("Progress page: background part loading, timeline range and typed range editing, resume point, marks, confirmed bulk changes, undo and start-page positioning passed.");
+    }
+
+    private static void CheckVideoScrolling(GenshinVideoHelper.App.MainWindow window, string root)
+    {
+        var list = (ListBox)window.FindName("ProgressVideoList");
+        foreach (var (width, height) in new[] { (1020, 730), (860, 600) })
+        {
+            Capture(window, root, $"ui-progress-scroll-{width}.png", width, height);
+            var scroll = (ScrollViewer)list.Template.FindName("LibraryScroll", list);
+            window.Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
+            Console.WriteLine($"Progress viewport {width}x{height}: list={list.ActualHeight:F1}, extent={scroll.ExtentHeight:F1}, viewport={scroll.ViewportHeight:F1}, scrollable={scroll.ScrollableHeight:F1}.");
+            Check(scroll.ViewportHeight > 0 && scroll.ScrollableHeight > 0 &&
+                scroll.ComputedVerticalScrollBarVisibility == Visibility.Visible, "Long map list exposes a vertical scrollbar");
+            var bar = Descendants<ScrollBar>(scroll).Single(item => item.Orientation == Orientation.Vertical);
+            Check(bar.ActualWidth <= 6 && bar.ActualWidth > 0, "Map scrollbar remains thin");
+            scroll.ScrollToTop();
+            window.UpdateLayout();
+            window.Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
+            PumpUntil(window, () => scroll.VerticalOffset == 0, "Map list returns to top");
+            var wheel = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120)
+                { RoutedEvent = UIElement.MouseWheelEvent };
+            var visibleRow = Descendants<ListBoxItem>(list).First();
+            visibleRow.RaiseEvent(wheel);
+            PumpUntil(window, () => scroll.VerticalOffset > 0, "Mouse wheel scrolls the map list");
+            var beforeDrag = scroll.VerticalOffset;
+            var track = (Track)bar.Template.FindName("PART_Track", bar);
+            track.Thumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+            track.Thumb.RaiseEvent(new DragDeltaEventArgs(0, 10) { RoutedEvent = Thumb.DragDeltaEvent });
+            track.Thumb.RaiseEvent(new DragCompletedEventArgs(0, 10, false) { RoutedEvent = Thumb.DragCompletedEvent });
+            PumpUntil(window, () => scroll.VerticalOffset > beforeDrag, "Scrollbar thumb moves the map list");
+            scroll.ScrollToBottom();
+            PumpUntil(window, () => Math.Abs(scroll.VerticalOffset - scroll.ScrollableHeight) < 1, "Map list reaches its bottom");
+            Check(Descendants<ListBoxItem>(list).Any(item => item.Content == list.Items[^1]), "Last map is reachable");
+            Capture(window, root, $"ui-progress-scroll-bottom-{width}.png", width, height);
+            scroll.ScrollToTop();
+            PumpUntil(window, () => scroll.VerticalOffset == 0, "Map list restores its top");
+        }
     }
 
     // Runs queued dispatcher work, including awaited continuations, until the condition holds.

@@ -31,6 +31,29 @@
     <Setter Property="Effect"><Setter.Value><DropShadowEffect BlurRadius="7" ShadowDepth="1" Opacity="0.08" Color="#343D4A" /></Setter.Value></Setter>
   </Style>
   <Style x:Key="Notice" TargetType="Border"><Setter Property="Background" Value="{StaticResource HoverBrush}" /><Setter Property="CornerRadius" Value="3" /><Setter Property="Padding" Value="13,10" /></Style>
+  <Style x:Key="ThinVerticalScrollBar" TargetType="ScrollBar">
+    <Setter Property="Width" Value="6" /><Setter Property="MinWidth" Value="6" /><Setter Property="Background" Value="Transparent" />
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ScrollBar">
+      <Track x:Name="PART_Track" Orientation="Vertical" IsDirectionReversed="True"
+             Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}" Value="{TemplateBinding Value}" ViewportSize="{TemplateBinding ViewportSize}">
+        <Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Focusable="False">
+          <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent" /></ControlTemplate></RepeatButton.Template>
+        </RepeatButton></Track.DecreaseRepeatButton>
+        <Track.Thumb><Thumb MinHeight="20" Cursor="Hand">
+          <Thumb.Template><ControlTemplate TargetType="Thumb">
+            <Border x:Name="ScrollThumb" Background="{StaticResource InputBorderBrush}" CornerRadius="3" Opacity="0.7" />
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ScrollThumb" Property="Background" Value="{StaticResource AccentBrush}" /><Setter TargetName="ScrollThumb" Property="Opacity" Value="1" /></Trigger>
+              <Trigger Property="IsDragging" Value="True"><Setter TargetName="ScrollThumb" Property="Background" Value="{StaticResource AccentBrush}" /><Setter TargetName="ScrollThumb" Property="Opacity" Value="1" /></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate></Thumb.Template>
+        </Thumb></Track.Thumb>
+        <Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Focusable="False">
+          <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent" /></ControlTemplate></RepeatButton.Template>
+        </RepeatButton></Track.IncreaseRepeatButton>
+      </Track>
+    </ControlTemplate></Setter.Value></Setter>
+  </Style>
   <Style x:Key="LibraryPickerList" TargetType="ListBox">
     <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Padding" Value="0" />
     <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" /><Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />

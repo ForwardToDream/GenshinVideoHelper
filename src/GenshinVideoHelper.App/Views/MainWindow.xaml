@@ -266,7 +266,7 @@
       <Grid x:Name="ProgressPage" Visibility="Collapsed" Margin="24,0,24,20">
        <Grid.RowDefinitions><RowDefinition /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
        <Grid>
-        <Grid.ColumnDefinitions><ColumnDefinition Width="236" /><ColumnDefinition /></Grid.ColumnDefinitions>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="260" /><ColumnDefinition /></Grid.ColumnDefinitions>
         <Border Style="{StaticResource Card}" Padding="12,14,12,10" Margin="0,0,12,12">
          <DockPanel>
           <StackPanel DockPanel.Dock="Top" Margin="4,0,4,10">
@@ -274,7 +274,8 @@
            <TextBlock x:Name="ProgressTotalText" Style="{StaticResource SecondaryText}" Margin="0,4,0,7" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
            <ProgressBar x:Name="ProgressTotalBar" AutomationProperties.Name="总体进度" />
           </StackPanel>
-          <ListBox x:Name="ProgressVideoList" Style="{StaticResource LibraryPickerList}" ItemContainerStyle="{StaticResource CompactListItem}" SelectionChanged="ProgressVideoList_SelectionChanged" AutomationProperties.Name="地图列表">
+          <ListBox x:Name="ProgressVideoList" Style="{StaticResource LibraryPickerList}" ItemContainerStyle="{StaticResource CompactListItem}" VirtualizingPanel.IsVirtualizingWhenGrouping="True" SelectionChanged="ProgressVideoList_SelectionChanged" AutomationProperties.Name="地图列表">
+           <ListBox.Resources><Style TargetType="ScrollBar" BasedOn="{StaticResource ThinVerticalScrollBar}" /></ListBox.Resources>
            <ListBox.GroupStyle><GroupStyle><GroupStyle.HeaderTemplate><DataTemplate>
             <TextBlock Text="{Binding Name}" Margin="4,8,0,5"><TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource SecondaryText}"><Style.Triggers><Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed" /></Trigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
            </DataTemplate></GroupStyle.HeaderTemplate></GroupStyle></ListBox.GroupStyle>

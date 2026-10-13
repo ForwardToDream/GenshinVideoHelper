@@ -22,6 +22,7 @@ Windows 与 .NET 8 SDK；在仓库根目录执行：
 | --- | --- | --- |
 | `-Preview` | 预选、分 P、异步预加载、错误重试 | Windows 桌面 |
 | `-History` | 手动跟随历史、持久化、取消、两次删除、下拉尺寸 | Windows 桌面；模拟浏览器 |
+| `-ProgressUi` | 进度编辑、分组列表、滚轮、细滚动条、默认 / 最小尺寸 | Windows 桌面；模拟分集 |
 | `-RenderUi` | 导航、默认 / 最小尺寸、下拉、库搜索、错误状态 | Windows 桌面 |
 | `-Login` | 匿名提示、取消、旧请求隔离、高清反馈 | Windows 桌面；模拟账号 |
 | `-Browser` | CDP、播放、暂停、跳转边界、倍速、静音、单视频复用与连点 | Chrome / Edge、FFmpeg |
