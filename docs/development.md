@@ -101,6 +101,7 @@ Chrome 与 Edge 共用 CDP、媒体命令、登录检查、高清采集及浮窗
 | --- | --- |
 | `config.json` | `AppSettings`、热键、库选择、最近分 P 链接、浮窗布局 |
 | `progress.json` | 每集已看区间、续播点、完成时间 |
+| `libraries/<Id>.json` | 可编辑视频库，首次生成默认库，之后只读此目录 |
 | `Chrome/`、`Edge/` | 各浏览器专用配置与登录状态 |
 | `logs/app.log` | 应用日志；1 MB 滚动，当前文件加 3 个旧文件 |
 
@@ -128,12 +129,14 @@ Chrome 与 Edge 共用 CDP、媒体命令、登录检查、高清采集及浮窗
 
 ## 增加视频库
 
-在 [Library/Data](../src/GenshinVideoHelper.Infrastructure/Library/Data) 复制现有 JSON，修改 `Id`、`Name`、`CreatorName`、`CreatorUrl`、`Description`、`Videos`。
+选库窗口共用新增 / 编辑表单。`IVideoLibraryStore` → `JsonVideoLibraryStore` 在 `.gvh/libraries/` 读写，每库一份 JSON；保存后刷新目录与当前库，保留播放会话。
+
+[Library/Data](../src/GenshinVideoHelper.Infrastructure/Library/Data) 仅为首次生成模板。已有目录不补回、不覆盖默认库；运行时不回退到内置资源。坏库保留原文件并报告，其余库仍可使用。保存以临时文件替换，编辑前保留 `.bak`。
 
 - `Id` 只含小写字母、数字、连字符，库间唯一。
 - UP 链接使用 `https://space.bilibili.com/数字/`。
 - 每项提供 `Number`、`Title`、`Bvid`，序号为正，序号和 BV 均不重复。
-- 文件自动嵌入程序集，按序号排序；新库补解析测试。启动页选库、搜索和视频选择沿用现有流程。
+- JSON 仅含 `Id`、`Name`、`CreatorName`、`CreatorUrl`、`Description`、`Videos`，文件名与 `Id` 一致。编辑时 ID 不变；视频按序号排序，表单接受 UID / 主页链接与视频链接 / BV 号。
 
 ## 发布与提交
 

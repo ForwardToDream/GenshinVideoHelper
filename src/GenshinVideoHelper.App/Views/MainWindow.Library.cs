@@ -93,8 +93,19 @@ public partial class MainWindow
 
     private void ChangeLibrary_Click(object sender, RoutedEventArgs e)
     {
-        var picker = new LibraryPickerWindow(_libraryCatalog, _settings.SelectedVideoLibraryId) { Owner = this };
-        if (picker.ShowDialog() == true) SelectLibrary(picker.SelectedLibrary);
+        var picker = new LibraryPickerWindow(_libraryCatalog, _settings.SelectedVideoLibraryId, store: Services.LibraryStore) { Owner = this };
+        picker.CatalogChanged += OnLibraryCatalogChanged;
+        try { if (picker.ShowDialog() == true) SelectLibrary(picker.SelectedLibrary); }
+        finally { picker.CatalogChanged -= OnLibraryCatalogChanged; }
+    }
+
+    private void OnLibraryCatalogChanged(VideoLibraryCatalog catalog)
+    {
+        Services.UpdateLibraries(catalog);
+        _updatingLibraryControls = true;
+        try { PopulateLibrary(catalog.Libraries.FirstOrDefault(library => library.Id == _settings.SelectedVideoLibraryId)); }
+        finally { _updatingLibraryControls = false; }
+        if (ProgressPageVisible) RefreshProgressPage();
     }
 
     private void FirstLaunch_ContentRendered(object? sender, EventArgs e)
@@ -103,8 +114,13 @@ public partial class MainWindow
         if (_closing || !_settings.IsFirstLaunch) return;
         _settings.IsFirstLaunch = false;
         SaveSettings();
-        var picker = new LibraryPickerWindow(_libraryCatalog, null, firstLaunch: true) { Owner = this };
-        var selected = picker.ShowDialog() == true ? picker.SelectedLibrary : null;
-        if (!_closing) SelectLibrary(selected);
+        var picker = new LibraryPickerWindow(_libraryCatalog, null, firstLaunch: true, store: Services.LibraryStore) { Owner = this };
+        picker.CatalogChanged += OnLibraryCatalogChanged;
+        try
+        {
+            var selected = picker.ShowDialog() == true ? picker.SelectedLibrary : null;
+            if (!_closing) SelectLibrary(selected);
+        }
+        finally { picker.CatalogChanged -= OnLibraryCatalogChanged; }
     }
 }

@@ -27,6 +27,7 @@ internal static class Program
             else if (args.Contains("--login")) LoginTests.Run(root);
             else if (args.Contains("--render-ui")) RenderUi(root);
             else if (args.Contains("--history")) HistoryUiTests.Run(root);
+            else if (args.Contains("--library")) LibraryUiTests.Run(root);
             else if (args.Contains("--progress-ui")) ProgressUiTests.RunStandalone(root);
             else if (args.Contains("--browser")) BrowserTestAsync(root, headed: false).GetAwaiter().GetResult();
             else if (args.Contains("--pip")) PipTest(root);

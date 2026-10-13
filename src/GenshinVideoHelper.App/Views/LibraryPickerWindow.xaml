@@ -33,14 +33,17 @@
        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding DisplayName}" />
       </DockPanel>
       <Button Tag="{Binding Library.CreatorUrl}" Visibility="{Binding CreatorVisibility}" Style="{StaticResource SubtleButton}" HorizontalAlignment="Left" Padding="0" MinHeight="20" Margin="0,3,0,0" Background="Transparent" BorderThickness="0" Click="Creator_Click" ToolTip="{Binding CreatorText}"><TextBlock Text="{Binding CreatorText}" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis" /></Button>
-      <TextBlock Text="{Binding Description}" Style="{StaticResource SecondaryText}" Margin="0,3,0,0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Description}" />
+      <DockPanel Margin="0,3,0,0">
+       <Button DockPanel.Dock="Right" Tag="{Binding Library}" Content="编辑" Style="{StaticResource SubtleButton}" Visibility="{Binding CreatorVisibility}" IsEnabled="{Binding CanManageLibraries, RelativeSource={RelativeSource AncestorType=Window}}" Padding="6,2" MinHeight="20" Margin="8,0,0,0" FontSize="12" Click="EditLibrary_Click" AutomationProperties.Name="编辑视频库" />
+       <TextBlock Text="{Binding Description}" Style="{StaticResource SecondaryText}" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Description}" />
+      </DockPanel>
      </StackPanel></DataTemplate></ListBox.ItemTemplate>
     </ListBox>
     <TextBlock x:Name="EmptyStateText" Text="没有找到匹配的库，请换个关键词。" Style="{StaticResource SecondaryText}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" Margin="8" />
    </Grid>
    <Border Grid.Row="2" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" CornerRadius="0,0,5,5"><StackPanel Margin="20,12,20,15">
     <TextBlock x:Name="PickerStatusText" Text="选择库后更新攻略列表，当前视频继续播放。" Style="{StaticResource SecondaryText}" Margin="0,0,0,10" MaxHeight="38" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
-    <DockPanel><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button x:Name="CancelLibraryButton" Content="取消" IsCancel="True" Margin="0,0,8,0" /><Button x:Name="UseLibraryButton" Content="使用此库" Style="{StaticResource PrimaryButton}" IsDefault="True" Click="UseLibrary_Click" IsEnabled="False" /></StackPanel><TextBlock x:Name="ResultCountText" Style="{StaticResource SecondaryText}" VerticalAlignment="Center" /></DockPanel>
+    <DockPanel><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button x:Name="CancelLibraryButton" Content="取消" IsCancel="True" Margin="0,0,8,0" /><Button x:Name="UseLibraryButton" Content="使用此库" Style="{StaticResource PrimaryButton}" IsDefault="True" Click="UseLibrary_Click" IsEnabled="False" /></StackPanel><Button x:Name="AddLibraryButton" Content="新增库" HorizontalAlignment="Left" IsEnabled="{Binding CanManageLibraries, RelativeSource={RelativeSource AncestorType=Window}}" Click="AddLibrary_Click" /></DockPanel>
    </StackPanel></Border>
    </Grid>
    </ScrollViewer>

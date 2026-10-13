@@ -11,7 +11,8 @@ namespace GenshinVideoHelper.App;
 
 public partial class LibraryPickerWindow : Window
 {
-    private readonly Choice[] _choices;
+    private Choice[] _choices;
+    private readonly IVideoLibraryStore? _store;
     private readonly string? _currentId;
     private readonly bool _firstLaunch;
     private ScrollViewer? _wheelViewer;
@@ -21,6 +22,9 @@ public partial class LibraryPickerWindow : Window
         "WheelOffset", typeof(double), typeof(LibraryPickerWindow), new PropertyMetadata(0d, (sender, args) =>
             ((LibraryPickerWindow)sender)._wheelViewer?.ScrollToVerticalOffset((double)args.NewValue)));
     public VideoLibrary? SelectedLibrary { get; private set; }
+    public VideoLibraryCatalog Catalog { get; private set; }
+    public bool CanManageLibraries => _store is not null;
+    public event Action<VideoLibraryCatalog>? CatalogChanged;
     public Native.WindowDisplayLayout DisplayLayout { get; }
 
     private sealed record Choice(VideoLibrary? Library)
@@ -39,8 +43,10 @@ public partial class LibraryPickerWindow : Window
         }
     }
 
-    public LibraryPickerWindow(VideoLibraryCatalog catalog, string? currentId, bool firstLaunch = false)
+    public LibraryPickerWindow(VideoLibraryCatalog catalog, string? currentId, bool firstLaunch = false, IVideoLibraryStore? store = null)
     {
+        Catalog = catalog;
+        _store = store;
         _currentId = currentId;
         _firstLaunch = firstLaunch;
         _choices = new[] { new Choice(null) }.Concat(catalog.Libraries.Select(library => new Choice(library))).ToArray();
@@ -65,17 +71,16 @@ public partial class LibraryPickerWindow : Window
         if (LibraryResults is not null) Filter();
     }
 
-    private void Filter()
+    private void Filter(string? selectedId = null)
     {
         StopScrolling();
         var previous = LibraryResults.SelectedItem as Choice;
         var words = SearchInput.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var results = _choices.Where(choice => choice.Matches(words)).ToArray();
         LibraryResults.ItemsSource = results;
-        LibraryResults.SelectedItem = previous is not null && results.Contains(previous) ? previous :
-            results.FirstOrDefault(choice => choice.Library?.Id == _currentId);
+        LibraryResults.SelectedItem = selectedId is not null ? results.FirstOrDefault(choice => choice.Library?.Id == selectedId) :
+            previous is not null && results.Contains(previous) ? previous : results.FirstOrDefault(choice => choice.Library?.Id == _currentId);
         EmptyStateText.Visibility = results.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        ResultCountText.Text = $"{results.Count(choice => choice.Library is not null)} 个视频库";
         UpdateSelection();
     }
 
@@ -155,6 +160,29 @@ public partial class LibraryPickerWindow : Window
     }
 
     private void ClearSearch_Click(object sender, RoutedEventArgs e) { SearchInput.Clear(); SearchInput.Focus(); }
+    private void AddLibrary_Click(object sender, RoutedEventArgs e) => EditLibrary(null);
+    private void EditLibrary_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is Button { Tag: VideoLibrary library }) EditLibrary(library);
+    }
+
+    private void EditLibrary(VideoLibrary? library)
+    {
+        if (_store is null) return;
+        StopScrolling();
+        var editor = new LibraryEditorWindow(_store, library) { Owner = this };
+        if (editor.ShowDialog() != true || editor.SavedLibrary is not { } saved) return;
+        Catalog = _store.Load();
+        _choices = new[] { new Choice(null) }.Concat(Catalog.Libraries.Select(item => new Choice(item))).ToArray();
+        LibraryResults.SelectedItem = null;
+        SearchInput.Clear();
+        Filter(saved.Id);
+        if (LibraryResults.SelectedItem is { } selected) LibraryResults.ScrollIntoView(selected);
+        PickerStatusText.Text = Catalog.Errors.Count == 0 ? "已保存。选择库后点击“使用此库”。" : "已保存，部分视频库读取失败。";
+        CatalogChanged?.Invoke(Catalog);
+    }
+
     private void UseLibrary_Click(object sender, RoutedEventArgs e)
     {
         if (LibraryResults.SelectedItem is not Choice choice || (_firstLaunch && choice.Library is null)) return;

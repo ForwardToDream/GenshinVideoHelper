@@ -1,0 +1,54 @@
+<Window x:Class="GenshinVideoHelper.App.LibraryEditorWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+ Title="新增视频库" Width="740" Height="700" MinWidth="580" MinHeight="440"
+ Background="{StaticResource PageBrush}" Foreground="{StaticResource TextBrush}" FontFamily="Microsoft YaHei UI"
+ WindowStyle="None" ResizeMode="CanResize" WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+ UseLayoutRounding="True" SnapsToDevicePixels="True">
+ <shell:WindowChrome.WindowChrome><shell:WindowChrome CaptionHeight="42" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="6" UseAeroCaptionButtons="False" /></shell:WindowChrome.WindowChrome>
+ <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="6" Background="{StaticResource PageBrush}">
+  <Grid>
+   <Grid.RowDefinitions><RowDefinition Height="42" /><RowDefinition /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+   <Border Background="{StaticResource TitleBarBrush}" CornerRadius="5,5,0,0"><DockPanel Margin="18,0,5,0">
+    <Button DockPanel.Dock="Right" Style="{StaticResource CaptionButton}" Click="Close_Click" ToolTip="关闭" AutomationProperties.Name="关闭视频库编辑" shell:WindowChrome.IsHitTestVisibleInChrome="True"><TextBlock Style="{StaticResource Symbol}" Text="&#xE8BB;" Foreground="White" FontSize="12" /></Button>
+    <TextBlock x:Name="EditorHeading" Text="新增视频库" Foreground="White" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+   </DockPanel></Border>
+   <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <StackPanel x:Name="EditorFields" Margin="20,16,20,4">
+     <Border Style="{StaticResource Card}"><StackPanel>
+      <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="3*" /><ColumnDefinition Width="2*" /></Grid.ColumnDefinitions>
+       <StackPanel Margin="0,0,12,0"><TextBlock Text="库名称" Margin="0,0,0,6" /><TextBox x:Name="LibraryNameInput" AutomationProperties.Name="库名称" /></StackPanel>
+       <StackPanel Grid.Column="1"><TextBlock Text="库编号" Margin="0,0,0,6" /><TextBox x:Name="LibraryIdInput" AutomationProperties.Name="库编号" ToolTip="小写字母、数字和连字符；编辑时保持不变。" /></StackPanel>
+      </Grid>
+      <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+       <StackPanel Margin="0,0,12,0"><TextBlock Text="UP 主昵称" Margin="0,0,0,6" /><TextBox x:Name="CreatorNameInput" AutomationProperties.Name="UP 主昵称" /></StackPanel>
+       <StackPanel Grid.Column="1"><TextBlock Text="UP 主 UID / 主页链接" Margin="0,0,0,6" /><TextBox x:Name="CreatorInput" AutomationProperties.Name="UP 主 UID 或主页链接" /></StackPanel>
+      </Grid>
+      <TextBlock Text="简介" Margin="0,0,0,6" />
+      <TextBox x:Name="DescriptionInput" Height="62" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="库简介" />
+     </StackPanel></Border>
+     <Border Style="{StaticResource Card}"><StackPanel>
+      <TextBlock Text="视频列表" FontWeight="Bold" Margin="0,0,0,12" />
+      <Grid Margin="0,0,0,6"><Grid.ColumnDefinitions><ColumnDefinition Width="48" /><ColumnDefinition /><ColumnDefinition Width="1.6*" /><ColumnDefinition Width="38" /></Grid.ColumnDefinitions>
+       <TextBlock Text="序号" Style="{StaticResource SecondaryText}" /><TextBlock Grid.Column="1" Text="标题 / 地图" Style="{StaticResource SecondaryText}" /><TextBlock Grid.Column="2" Text="视频链接 / BV 号" Style="{StaticResource SecondaryText}" />
+      </Grid>
+      <ItemsControl x:Name="VideoRows">
+       <ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,0,0,8"><Grid.ColumnDefinitions><ColumnDefinition Width="48" /><ColumnDefinition /><ColumnDefinition Width="1.6*" /><ColumnDefinition Width="38" /></Grid.ColumnDefinitions>
+        <TextBox Text="{Binding Number, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,6,0" Padding="4,6" HorizontalContentAlignment="Center" AutomationProperties.Name="视频序号" />
+        <TextBox Grid.Column="1" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" AutomationProperties.Name="视频标题" />
+        <TextBox Grid.Column="2" Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="视频链接或 BV 号" />
+        <Button Grid.Column="3" Tag="{Binding}" Style="{StaticResource SubtleButton}" Padding="6" Margin="4,0,0,0" Click="RemoveVideo_Click" ToolTip="删除视频" AutomationProperties.Name="删除视频"><TextBlock Style="{StaticResource Symbol}" Text="&#xE74D;" FontSize="14" /></Button>
+       </Grid></DataTemplate></ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <Button x:Name="AddVideoButton" Content="添加视频" Height="40" HorizontalAlignment="Stretch" Margin="0,4,0,0" Click="AddVideo_Click" />
+     </StackPanel></Border>
+    </StackPanel>
+   </ScrollViewer>
+   <Border Grid.Row="2" Background="White" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" CornerRadius="0,0,5,5"><StackPanel Margin="20,12,20,15">
+    <TextBlock x:Name="EditorStatusText" Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" Margin="0,0,0,10" Visibility="Collapsed" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button x:Name="CancelEditButton" Content="取消" IsCancel="True" Margin="0,0,8,0" /><Button x:Name="SaveLibraryButton" Content="保存" Style="{StaticResource PrimaryButton}" IsDefault="True" Click="Save_Click" /></StackPanel>
+   </StackPanel></Border>
+  </Grid>
+ </Border>
+</Window>

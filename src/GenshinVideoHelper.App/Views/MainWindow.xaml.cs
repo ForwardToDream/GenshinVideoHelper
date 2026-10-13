@@ -23,7 +23,7 @@ public partial class MainWindow : Window
     public AppServices Services { get; }
     public WindowDisplayLayout DisplayLayout { get; }
     private readonly AppSettings _settings;
-    private readonly VideoLibraryCatalog _libraryCatalog;
+    private VideoLibraryCatalog _libraryCatalog => Services.Libraries;
     private readonly DispatcherTimer _poll = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _previewDebounce = new() { Interval = TimeSpan.FromMilliseconds(350) };
     private PipMouseVisibilityService _pipMouseVisibility => Services.Pip.MouseVisibility;
@@ -49,7 +49,6 @@ public partial class MainWindow : Window
     {
         Services = services;
         _settings = services.Settings;
-        _libraryCatalog = services.Libraries;
         // Referenced by the item templates, so it has to exist before the markup is loaded.
         Resources["ProgressLookup"] = _progressLookup = new(services.Progress, () => _selectedInfo?.Bvid);
         InitializeComponent();

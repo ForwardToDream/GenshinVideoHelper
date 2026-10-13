@@ -36,7 +36,9 @@ public sealed class AppServices : IDisposable
     public AppSettings Settings { get; }
     public ISettingsStore? SettingsStore { get; }
     public string? LoadWarning { get; }
-    public VideoLibraryCatalog Libraries { get; }
+    public VideoLibraryCatalog Libraries { get; private set; }
+    public IVideoLibraryStore? LibraryStore { get; }
+    public void UpdateLibraries(VideoLibraryCatalog catalog) => Libraries = catalog;
     public IBrowserSession Browser { get; }
     public IBrowserCatalog BrowserCatalog { get; }
     public FollowCoordinator Follow { get; }
@@ -52,20 +54,23 @@ public sealed class AppServices : IDisposable
         AppLog.MinLevel = loaded.Settings.LogLevel;
         AppLog.Info("App", $"配置已加载，日志级别 {loaded.Settings.LogLevel}{(loaded.Warning is null ? "" : "；" + loaded.Warning)}。");
         return new(loaded.Settings, ApplicationPaths.BrowserProfileDirectory, store, loadWarning: loaded.Warning, enableWarmup: true,
-            progressStore: new JsonProgressStore(ApplicationPaths.ProgressPath), updateFactory: () => new GitHubUpdateChecker());
+            progressStore: new JsonProgressStore(ApplicationPaths.ProgressPath), updateFactory: () => new GitHubUpdateChecker(),
+            libraryStore: new JsonVideoLibraryStore(ApplicationPaths.LibraryDirectory));
     }
 
     public AppServices(AppSettings settings, string browserProfile, ISettingsStore? store = null,
         VideoLibraryCatalog? libraries = null, IEpisodeProvider? episodes = null,
         IBrowserSession? browser = null, IVideoPlayer? video = null, string? loadWarning = null, Func<IEpisodeProvider>? episodeFactory = null, bool enableWarmup = false,
         IProgressStore? progressStore = null, IBrowserCatalog? browserCatalog = null, Func<BrowserKind, string>? profileFor = null,
-        Func<IUpdateChecker>? updateFactory = null)
+        Func<IUpdateChecker>? updateFactory = null, IVideoLibraryStore? libraryStore = null)
     {
         _enableWarmup = enableWarmup;
         Settings = settings; SettingsStore = store;
         Progress = new(progressStore, settings.ProgressCompletionPercent / 100d);
         LoadWarning = loadWarning is null || Progress.LoadWarning is null ? loadWarning ?? Progress.LoadWarning : $"{loadWarning} {Progress.LoadWarning}";
-        Libraries = libraries ?? VideoLibraryLoader.LoadBuiltIn();
+        LibraryStore = libraryStore ?? (libraries is null
+            ? new JsonVideoLibraryStore(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(browserProfile))!, "libraries")) : null);
+        Libraries = libraries ?? LibraryStore!.Load();
         BrowserCatalog = browserCatalog ?? new BrowserCatalog();
         if (browser is null)
         {

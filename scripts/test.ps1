@@ -1,4 +1,4 @@
-param([switch]$Browser, [switch]$Pip, [switch]$RenderUi, [switch]$History, [switch]$ProgressUi, [switch]$Display, [switch]$Follow, [switch]$Preview, [switch]$Lifecycle, [switch]$Latency, [switch]$Background, [switch]$Progress, [switch]$Login, [switch]$Vision, [switch]$VisionAlgorithms, [switch]$VisionBrowser, [switch]$BrowserSwitch, [switch]$Edge)
+param([switch]$Browser, [switch]$Pip, [switch]$RenderUi, [switch]$History, [switch]$Library, [switch]$ProgressUi, [switch]$Display, [switch]$Follow, [switch]$Preview, [switch]$Lifecycle, [switch]$Latency, [switch]$Background, [switch]$Progress, [switch]$Login, [switch]$Vision, [switch]$VisionAlgorithms, [switch]$VisionBrowser, [switch]$BrowserSwitch, [switch]$Edge)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
 $taskProject = Join-Path $taskRoot 'tests/GenshinVideoHelper.Smoke/GenshinVideoHelper.Smoke.csproj'
@@ -7,7 +7,7 @@ if ($VisionAlgorithms) {
 }
 else { dotnet test (Join-Path $taskRoot 'GenshinVideoHelper.sln') -c Release }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-if ($Browser -or $Pip -or $Follow -or $Lifecycle -or $Preview -or $RenderUi -or $History -or $ProgressUi -or $Display -or $Latency -or $Background -or $Progress -or $Login -or $Vision -or $VisionBrowser -or $BrowserSwitch) {
+if ($Browser -or $Pip -or $Follow -or $Lifecycle -or $Preview -or $RenderUi -or $History -or $Library -or $ProgressUi -or $Display -or $Latency -or $Background -or $Progress -or $Login -or $Vision -or $VisionBrowser -or $BrowserSwitch) {
     dotnet build $taskProject -c Release
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
@@ -40,6 +40,10 @@ if ($RenderUi) {
 }
 if ($History) {
     dotnet run --project $taskProject -c Release --no-build -- --history $taskRoot
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+if ($Library) {
+    dotnet run --project $taskProject -c Release --no-build -- --library $taskRoot
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 if ($ProgressUi) {

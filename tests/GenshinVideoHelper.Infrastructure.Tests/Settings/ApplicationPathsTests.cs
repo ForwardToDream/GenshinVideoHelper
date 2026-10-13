@@ -12,6 +12,7 @@ public sealed class ApplicationPathsTests
         Assert.Equal(data, ApplicationPaths.DataDirectory);
         Assert.Equal(Path.Combine(data, "config.json"), ApplicationPaths.SettingsPath);
         Assert.Equal(Path.Combine(data, "progress.json"), ApplicationPaths.ProgressPath);
+        Assert.Equal(Path.Combine(data, "libraries"), ApplicationPaths.LibraryDirectory);
         Assert.Equal(Path.Combine(data, "logs"), ApplicationPaths.LogDirectory);
         Assert.Equal(Path.Combine(data, "Chrome"), ApplicationPaths.BrowserProfileDirectory);
         Assert.Equal(Path.Combine(data, "Edge"), ApplicationPaths.BrowserProfileFor(Core.Models.BrowserKind.Edge));
