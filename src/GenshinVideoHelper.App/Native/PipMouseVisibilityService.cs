@@ -13,12 +13,17 @@ public sealed class PipMouseVisibilityService : IDisposable
     private readonly bool _pollAutomatically;
     private readonly Func<PipLayout?>? _getLayout;
     private readonly Action<PipLayout>? _layoutChanged;
+    private readonly Func<PipPlacement>? _getDefaultPlacement;
+    private string _visibilityShortcut = HotkeyBindings.Defaults()[HotkeyAction.ReversePipVisibility];
     private PipFrameWindow? _frame;
     private nint _window;
     private bool _hiddenByUs, _disposed;
     public int BrowserProcessId { get; private set; }
+    public bool IsOpen { get; private set; }
+    internal long OpenVersion { get; private set; }
+    public event Action? Changed;
     public bool IsTemporarilyHidden => _hiddenByUs;
-    public nint WindowHandle => _window;
+    public nint WindowHandle => _frame?.VideoWindowHandle ?? 0;
     public PipVisibilityMode Mode { get; private set; } = PipVisibilityMode.Automatic;
     public nint FrameWindowHandle => _frame?.WindowHandle ?? 0;
     public PipPlacement? Placement => _frame?.Placement;
@@ -26,11 +31,12 @@ public sealed class PipMouseVisibilityService : IDisposable
     public void FlushPlacement() => _frame?.FlushPlacement();
 
     public PipMouseVisibilityService(bool pollAutomatically = true, Func<PipLayout?>? getLayout = null,
-        Action<PipLayout>? layoutChanged = null)
+        Action<PipLayout>? layoutChanged = null, Func<PipPlacement>? getDefaultPlacement = null)
     {
         _pollAutomatically = pollAutomatically;
         _getLayout = getLayout;
         _layoutChanged = layoutChanged;
+        _getDefaultPlacement = getDefaultPlacement;
         _timer.Tick += (_, _) =>
         {
             try { Refresh(); }
@@ -41,7 +47,7 @@ public sealed class PipMouseVisibilityService : IDisposable
     public bool CycleMode()
     {
         Refresh();
-        if (_disposed || _window == 0) return false;
+        if (_disposed || !IsOpen) return false;
         Mode = Mode switch
         {
             PipVisibilityMode.Automatic => PipVisibilityMode.AlwaysVisible,
@@ -53,38 +59,80 @@ public sealed class PipMouseVisibilityService : IDisposable
         return true;
     }
 
-    public void TrackBrowser(int processId)
+    private void EnsureFrame()
+    {
+        if (_frame is not null) return;
+        _frame = new PipFrameWindow();
+        _frame.SetVisibilityShortcut(_visibilityShortcut);
+        _frame.LayoutChanged += layout => _layoutChanged?.Invoke(layout);
+        _frame.CloseRequested += CloseCurrent;
+    }
+
+    public void SetVisibilityShortcut(string keys)
+    {
+        _visibilityShortcut = keys;
+        _frame?.SetVisibilityShortcut(keys);
+    }
+
+    public void Open()
+    {
+        if (_disposed) return;
+        EnsureFrame();
+        if (_frame!.Layout is null)
+        {
+            if (_getLayout?.Invoke() is { IsValid: true } layout) _frame.RestoreLayout(layout);
+            else
+            {
+                var display = DisplayMetrics.ForWindow(_frame.WindowHandle);
+                _frame.Place(_getDefaultPlacement?.Invoke() ?? ScreenLayout.DefaultPip(display.WorkArea, display.Dpi, 420, 20, 16d / 9));
+            }
+        }
+        var wasOpen = IsOpen;
+        IsOpen = true;
+        if (!wasOpen) OpenVersion++;
+        _frame.SetMode(Mode);
+        _frame.SetTemporarilyHidden(_hiddenByUs);
+        if (_pollAutomatically) _timer.Start();
+        Refresh();
+        if (!wasOpen) Changed?.Invoke();
+    }
+
+    public void Place(PipPlacement placement)
+    {
+        if (_disposed || !IsOpen) return;
+        _frame!.Place(placement);
+        Refresh();
+    }
+
+    public void TrackBrowser(int processId, bool openFrame = true)
     {
         if (_disposed || processId <= 0) return;
         if (BrowserProcessId != processId)
         {
-            Suspend();
+            DetachVideo();
             BrowserProcessId = processId;
             AppLog.Info("Pip", $"开始跟踪 PID {processId} 的浮窗显隐。");
         }
+        if (openFrame) Open();
         if (_pollAutomatically) _timer.Start();
         Refresh();
     }
 
     public void Refresh()
     {
-        if (_disposed || BrowserProcessId <= 0) return;
-        if (!PipWindowService.IsPipWindow(_window, BrowserProcessId))
+        if (_disposed || !IsOpen || _frame is null) return;
+        if (BrowserProcessId > 0 && !PipWindowService.IsPipWindow(_window, BrowserProcessId))
         {
-            ReleaseFrame();
+            ReleaseVideo();
             _window = PipWindowService.FindPip(BrowserProcessId);
         }
-        if (_window == 0) return;
-        if (_frame is null)
-        {
-            _frame = new PipFrameWindow();
-            _frame.LayoutChanged += layout => _layoutChanged?.Invoke(layout);
-        }
-        if (_frame.VideoWindowHandle != _window)
+        if (_window != 0 && _frame.VideoWindowHandle != _window)
         {
             try { _frame.Attach(_window, _getLayout?.Invoke()); }
-            catch { _timer.Stop(); ReleaseFrame(); _window = 0; throw; }
+            catch { _timer.Stop(); ReleaseVideo(); _window = 0; throw; }
+            _frame.SetTemporarilyHidden(_hiddenByUs);
             AppLog.Info("Pip", $"浮窗 0x{_window:X} 已嵌入统一外框。");
+            Changed?.Invoke();
         }
         if (!GetWindowRect(_frame.WindowHandle, out var bounds)) return;
         var width = bounds.Right - bounds.Left;
@@ -103,36 +151,44 @@ public sealed class PipMouseVisibilityService : IDisposable
         }
     }
 
-    private void ReleaseFrame(bool closeVideo = false)
+    private void ReleaseVideo(bool closeVideo = false)
     {
-        _frame?.Hide();
+        var hadVideo = _frame?.IsVideoEmbedded == true;
         if (closeVideo && PipWindowService.IsPipWindow(_window, BrowserProcessId, includeHidden: true))
             _frame?.CloseVideo();
         _frame?.ReleaseVideo(restoreVideo: !closeVideo);
-        _hiddenByUs = false;
+        if (hadVideo) Changed?.Invoke();
     }
 
-    public void Suspend() => StopTracking(closeVideo: false);
+    public void Suspend() => DetachVideo();
+
+    public void DetachVideo(bool closeVideo = false)
+    {
+        ReleaseVideo(closeVideo);
+        _window = 0;
+        BrowserProcessId = 0;
+        if (IsOpen) Refresh();
+    }
 
     public void CloseCurrent()
     {
         FlushPlacement();
-        StopTracking(closeVideo: true);
-    }
-
-    private void StopTracking(bool closeVideo)
-    {
+        IsOpen = false;
+        OpenVersion++;
         _timer.Stop();
-        ReleaseFrame(closeVideo);
+        _frame?.Hide();
+        ReleaseVideo(closeVideo: true);
+        _hiddenByUs = false;
         if (BrowserProcessId != 0) AppLog.Info("Pip", "停止跟踪浮窗显隐。");
         _window = 0;
         BrowserProcessId = 0;
+        Changed?.Invoke();
     }
 
     public void Dispose()
     {
         if (_disposed) return;
-        StopTracking(closeVideo: true);
+        CloseCurrent();
         _disposed = true;
         _frame?.Close();
         _frame = null;

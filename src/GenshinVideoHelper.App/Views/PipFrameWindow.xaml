@@ -24,7 +24,8 @@
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
       <Grid x:Name="ModeBar" Background="{StaticResource TitleBarBrush}" ToolTip="拖动横条或视频移动浮窗；拖动边缘调整大小">
-        <Viewbox Width="14" Height="14" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <DockPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="32,0" IsHitTestVisible="False">
+        <Viewbox DockPanel.Dock="Left" Width="14" Height="14" VerticalAlignment="Center">
           <Grid Width="14" Height="14">
             <Path x:Name="LockIcon" Data="M4,6.5 V4 A3,3 0 0 1 10,4 V6.5 M3,6.5 H11 V13 H3 Z M7,9 V11"
                   Stroke="White" StrokeThickness="1.4" StrokeLineJoin="Round" Visibility="Collapsed"/>
@@ -33,6 +34,13 @@
                   Stroke="White" StrokeThickness="1.4" StrokeLineJoin="Round"/>
           </Grid>
         </Viewbox>
+        <Border x:Name="VisibilityShortcutBadge" BorderBrush="#CCFFFFFF" BorderThickness="1" CornerRadius="2"
+                Height="18" Padding="5,0" Margin="8,0,0,0" VerticalAlignment="Center"
+                ToolTip="{Binding Text, ElementName=VisibilityShortcutText}" AutomationProperties.Name="切换显隐快捷键">
+          <TextBlock x:Name="VisibilityShortcutText" Foreground="White" FontFamily="Consolas" FontSize="10"
+                     VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+        </Border>
+        </DockPanel>
         <Button x:Name="CloseVideoButton" HorizontalAlignment="Right" Width="28" Height="24" MinHeight="0" MinWidth="0" Padding="0" VerticalAlignment="Center" Focusable="False"
                 Style="{StaticResource CaptionButton}" Click="CloseVideo_Click" ToolTip="关闭画中画"
                 AutomationProperties.Name="关闭画中画" shell:WindowChrome.IsHitTestVisibleInChrome="True">

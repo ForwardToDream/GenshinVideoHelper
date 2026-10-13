@@ -84,7 +84,7 @@ public sealed class AppServices : IDisposable
         _episodes = episodes;
         Pip = new(settings, store);
         if (Browser is BrowserSessionManager manager)
-            manager.SessionChanging += () => { Vision?.Configure(null); Pip.MouseVisibility.CloseCurrent(); };
+            manager.SessionChanging += () => { Vision?.Configure(null); Pip.MouseVisibility.DetachVideo(closeVideo: true); };
         Preview = new(episodes, _cache);
         // A previewed video is known before it is ever followed, so its parts can be shown and pre-marked.
         Preview.Changed += preview => { if (preview.Info is { } info) Progress.Describe(info); };

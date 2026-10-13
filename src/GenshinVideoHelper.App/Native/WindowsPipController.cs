@@ -16,12 +16,29 @@ public sealed class WindowsPipController : IPipController, IDisposable
     {
         _settings = settings;
         _store = store;
-        MouseVisibility = new(getLayout: () => settings.PipLayout, layoutChanged: RememberLayout);
+        MouseVisibility = new(getLayout: () => settings.PipLayout, layoutChanged: RememberLayout,
+            getDefaultPlacement: () => DefaultPlacement(16d / 9));
+        UpdateVisibilityShortcut();
+    }
+    public void UpdateVisibilityShortcut() => MouseVisibility.SetVisibilityShortcut(_settings.Hotkeys[HotkeyAction.ReversePipVisibility]);
+    public void OpenFrame() => MouseVisibility.Open();
+
+    public void PlaceFrame(double aspectRatio = 16d / 9)
+    {
+        MouseVisibility.FlushPlacement();
+        MouseVisibility.Place(DefaultPlacement(aspectRatio));
+        if (MouseVisibility.Layout is { } layout) RememberLayout(layout);
+    }
+
+    private PipPlacement DefaultPlacement(double aspectRatio)
+    {
+        var display = DisplayMetrics.ForWindow(HelperWindow);
+        return ScreenLayout.DefaultPip(display.WorkArea, display.Dpi, _settings.PipWidth, _settings.PipMargin, aspectRatio);
     }
     public Task ObserveAsync(int browserProcessId, bool enabled, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        if (enabled && MouseVisibility.BrowserProcessId != browserProcessId) MouseVisibility.TrackBrowser(browserProcessId);
+        if (enabled && MouseVisibility.BrowserProcessId != browserProcessId) MouseVisibility.TrackBrowser(browserProcessId, openFrame: false);
         else if (!enabled) MouseVisibility.Suspend();
         return Task.CompletedTask;
     }
@@ -35,7 +52,9 @@ public sealed class WindowsPipController : IPipController, IDisposable
     {
         MouseVisibility.FlushPlacement();
         var ratio = state.VideoHeight > 0 ? (double)state.VideoWidth / state.VideoHeight : 16d / 9;
+        var version = MouseVisibility.OpenVersion;
         await PipWindowService.WaitForPipAsync(browserProcessId, token);
+        if (version != MouseVisibility.OpenVersion && !MouseVisibility.IsOpen) return;
         MouseVisibility.TrackBrowser(browserProcessId);
         await PipWindowService.PlaceAsync(browserProcessId, HelperWindow, _settings.PipWidth, _settings.PipMargin, ratio, token,
             restore ? _settings.PipLayout : null);

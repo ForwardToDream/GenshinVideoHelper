@@ -31,6 +31,7 @@ internal static class Program
             else if (args.Contains("--progress-ui")) ProgressUiTests.RunStandalone(root);
             else if (args.Contains("--browser")) BrowserTestAsync(root, headed: false).GetAwaiter().GetResult();
             else if (args.Contains("--pip")) PipTest(root);
+            else if (args.Contains("--pip-shell")) PipShellTests.Run(root);
             else if (args.Contains("--bilibili")) BilibiliTestAsync(root).GetAwaiter().GetResult();
             else if (args.Contains("--bilibili-pip")) PipTest(root, example: true);
             else if (args.Contains("--preview")) PreviewUiTest(root);

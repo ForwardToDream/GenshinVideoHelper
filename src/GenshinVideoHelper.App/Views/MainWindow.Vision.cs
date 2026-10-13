@@ -50,7 +50,7 @@ public partial class MainWindow
         try
         {
             var follow=Services.Follow.Current;
-            if(follow.Request is not {} request || follow.Page is not {} page || follow.Video?.PictureInPicture!=true)
+            if(!_pipMouseVisibility.IsOpen || follow.Request is not {} request || follow.Page is not {} page || follow.Video?.PictureInPicture!=true)
             {_visionWindowCheck.Stop();Services.Vision?.Configure(null);_mapOverlay?.Hide();VisionStatus.Text="开始跟随后自动识别";return;}
             _visionWindowCheck.Start();
             if(!GameWindowCapture.IsWindow(_gameWindow) && Stopwatch.GetTimestamp()>=_nextGameSearch)

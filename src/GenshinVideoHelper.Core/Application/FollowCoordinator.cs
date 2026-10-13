@@ -242,7 +242,7 @@ public sealed class FollowCoordinator : IDisposable
     {
         var request = Session.Current;
         AppLog.Info("Follow", $"命令 {command.Action}。");
-        if (command.Action is "toggle" or "pip")
+        if (command.Action is "toggle" or "pip" or "ensurePipClosed")
         {
             Session.Suppress();
             Publish(Current with { Phase = FollowPhase.Suppressed, CanRetry = false });
@@ -255,7 +255,7 @@ public sealed class FollowCoordinator : IDisposable
             {
                 EnsureCurrent(request);
                 var state = await ReadVideoAsync(command, request);
-                if (command.Action == "pip" && state.PictureInPicture) await PlaceAsync(state, request, restore: true);
+                if (command.Action is "pip" or "ensurePip" && state.PictureInPicture) await PlaceAsync(state, request, restore: true);
                 EnsureCurrent(request);
                 Message(command.Action switch
                 {

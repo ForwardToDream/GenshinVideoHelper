@@ -38,6 +38,7 @@ public partial class MainWindow
 
     private void UpdateHotkeyTooltips()
     {
+        Services.Pip.UpdateVisibilityShortcut();
         BackButton.ToolTip = _settings.Hotkeys[HotkeyAction.SeekBackward];
         PlayButton.ToolTip = _settings.Hotkeys[HotkeyAction.TogglePlayback];
         ForwardButton.ToolTip = _settings.Hotkeys[HotkeyAction.SeekForward];

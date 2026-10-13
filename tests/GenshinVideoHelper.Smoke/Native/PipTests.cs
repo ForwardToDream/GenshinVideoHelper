@@ -343,6 +343,7 @@ internal static class PipTests
 
             var embeddedFrame = Application.Current.Windows.OfType<GenshinVideoHelper.App.PipFrameWindow>()
                 .Single(w => w.WindowHandle == visibility.FrameWindowHandle);
+            var rememberedFrame = visibility.Placement;
             ((Button)embeddedFrame.FindName("CloseVideoButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Console.WriteLine("Unified frame close button invoked.");
             for (var i = 0; i < 40; i++)
@@ -365,8 +366,10 @@ internal static class PipTests
             await PipWindowService.PlaceAsync(pid, helper, 420, 20, 16d / 9);
             pip = PipWindowService.FindPip(pid, includeHidden: true);
             GetWindowRect(pip, out bounds);
-            SetCursorPos((bounds.Left + bounds.Right) / 2, (bounds.Top + bounds.Bottom) / 2);
             visibility.TrackBrowser(pid);
+            Check(visibility.Placement == rememberedFrame, "Reopening video keeps the independent frame's existing layout");
+            GetWindowRect(visibility.FrameWindowHandle, out bounds);
+            SetCursorPos((bounds.Left + bounds.Right) / 2, (bounds.Top + bounds.Bottom) / 2);
             await ExpectVisibility(false, "Reopened PiP resumes mouse avoidance");
             visibility.Dispose();
             Check(visibility.FrameWindowHandle == 0, "Disposal destroys the bar");

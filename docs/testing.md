@@ -25,6 +25,7 @@ Windows 与 .NET 8 SDK；在仓库根目录执行：
 | `-ProgressUi` | 进度编辑、自动完成、悬停时间、分组滚动、默认 / 最小布局 | Windows 桌面；模拟分集 |
 | `-RenderUi` | 导航、默认 / 最小尺寸、下拉、库搜索、错误状态 | Windows 桌面 |
 | `-Library` | 新增 / 编辑 / 取消、JSON 保存、库刷新、搜索、紧凑布局与滚动 | Windows 桌面，无浏览器 / 网络 |
+| `-PipShell` | 无视频启动外框、透明穿过、启闭、复位、布局记忆与退出 | Windows 桌面，无浏览器 / 网络 |
 | `-Login` | 匿名提示、取消、旧请求隔离、高清反馈 | Windows 桌面；模拟账号 |
 | `-Browser` | CDP、播放、暂停、跳转边界、倍速、静音、单视频复用与连点 | Chrome / Edge、FFmpeg |
 | `-Pip` | 原生画中画、统一外框、热键、显隐、布局记忆 | Windows 桌面、浏览器、FFmpeg |

@@ -19,6 +19,8 @@ public partial class PipFrameWindow : Window
     private readonly nint _handle;
     private readonly WindowDisplayLayout _displayLayout;
     private PipVideoSurface? _video;
+    private (int Width, int Height, NativeBounds Slot)? _emptyRegion;
+    private bool _applyingRegion;
     private bool _hidden;
     private bool _applyingPlacement;
     private bool _userChanging;
@@ -32,11 +34,12 @@ public partial class PipFrameWindow : Window
     public bool IsVideoEmbedded => _video?.IsAttached == true;
     public PipLayout? Layout => _layout;
     public event Action<PipLayout>? LayoutChanged;
+    public event Action? CloseRequested;
     public PipPlacement? Placement
     {
         get
         {
-            if (_video is null || !GetWindowRect(_handle, out var bounds)) return null;
+            if (!GetWindowRect(_handle, out var bounds)) return null;
             return new(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
         }
     }
@@ -44,12 +47,14 @@ public partial class PipFrameWindow : Window
     public PipFrameWindow()
     {
         InitializeComponent();
+        SetVisibilityShortcut(HotkeyBindings.Defaults()[HotkeyAction.ReversePipVisibility]);
         _displayLayout = new(this, resizeWindow: false);
         _handle = new WindowInteropHelper(this).EnsureHandle();
         _displayLayout.DisplayChanged += DisplayChanged;
         SetWindowLong(_handle, -20, GetWindowLong(_handle, -20) | 0x80 | 0x08000000);
         HwndSource.FromHwnd(_handle)!.AddHook(WindowMessages);
         _placementTimer.Tick += (_, _) => FlushPlacement();
+        VideoSlot.SizeChanged += (_, _) => UpdateVideo();
     }
 
     public void Attach(nint pip, PipLayout? layout = null)
@@ -57,11 +62,14 @@ public partial class PipFrameWindow : Window
         if (VideoWindowHandle == pip) return;
         ReleaseVideo();
         if (!GetWindowRect(pip, out var bounds)) throw new InvalidOperationException("画中画窗口已关闭。");
-        var display = DisplayMetrics.ForWindow(_handle);
-        var border = ScreenLayout.Pixels(ReferenceBorder, display.Dpi);
-        var bar = ScreenLayout.Pixels(ReferenceBarHeight, display.Dpi);
-        ApplyBounds(bounds.Left - border, bounds.Top - bar - border,
-            bounds.Right - bounds.Left + border * 2, bounds.Bottom - bounds.Top + bar + border * 2);
+        if (_layout is null)
+        {
+            var display = DisplayMetrics.ForWindow(_handle);
+            var border = ScreenLayout.Pixels(ReferenceBorder, display.Dpi);
+            var bar = ScreenLayout.Pixels(ReferenceBarHeight, display.Dpi);
+            ApplyBounds(bounds.Left - border, bounds.Top - bar - border,
+                bounds.Right - bounds.Left + border * 2, bounds.Bottom - bounds.Top + bar + border * 2);
+        }
         try
         {
             _applyingPlacement = true;
@@ -73,7 +81,7 @@ public partial class PipFrameWindow : Window
             UpdateLayout();
             UpdateVideo();
         }
-        catch { ReleaseVideo(); Hide(); throw; }
+        catch { ReleaseVideo(); throw; }
         finally { _applyingPlacement = false; _observedPlacement = Placement; _layout ??= CaptureLayout(); }
     }
 
@@ -103,7 +111,7 @@ public partial class PipFrameWindow : Window
 
     private void DisplayChanged(DisplayMetrics previous, DisplayMetrics current)
     {
-        if (_video is null || _applyingPlacement || _layout is not { } layout) return;
+        if (_applyingPlacement || _layout is not { } layout) return;
         if (_userChanging && previous.DeviceName != current.DeviceName && GetWindowRect(_handle, out var bounds))
         {
             var resized = ScreenLayout.Restore(layout, current.WorkArea, current.Dpi);
@@ -159,6 +167,8 @@ public partial class PipFrameWindow : Window
         return ScreenLayout.Remember(placement, display.WorkArea, display.Dpi, display.DeviceName);
     }
 
+    public void SetVisibilityShortcut(string keys) => VisibilityShortcutText.Text = keys;
+
     public void SetMode(PipVisibilityMode mode)
     {
         if (_mode == mode) return;
@@ -184,15 +194,53 @@ public partial class PipFrameWindow : Window
 
     private void UpdateVideo()
     {
-        if (_video is null || PresentationSource.FromVisual(VideoSlot) is null || !GetWindowRect(_handle, out var frame)) return;
+        if (_applyingRegion || PresentationSource.FromVisual(VideoSlot) is null || !GetWindowRect(_handle, out var frame)) return;
         var first = VideoSlot.PointToScreen(new Point());
         var last = VideoSlot.PointToScreen(new Point(VideoSlot.ActualWidth, VideoSlot.ActualHeight));
         var destination = new NativeBounds { Left = (int)Math.Round(first.X - frame.Left), Top = (int)Math.Round(first.Y - frame.Top),
             Right = (int)Math.Round(last.X - frame.Left), Bottom = (int)Math.Round(last.Y - frame.Top) };
         if (destination.Right <= destination.Left || destination.Bottom <= destination.Top) return;
+        if (_video is null)
+        {
+            SetEmptyRegion(frame.Right - frame.Left, frame.Bottom - frame.Top, destination);
+            return;
+        }
+        if (_emptyRegion is not null)
+        {
+            _applyingRegion = true;
+            try
+            {
+                if (SetWindowRgn(_handle, 0, true) == 0) throw new Win32Exception(Marshal.GetLastWin32Error());
+                _emptyRegion = null;
+            }
+            finally { _applyingRegion = false; }
+        }
         var restore = new NativeBounds { Left = frame.Left + destination.Left, Top = frame.Top + destination.Top,
             Right = frame.Left + destination.Right, Bottom = frame.Top + destination.Bottom };
         _video.Update(destination, restore, !_hidden);
+    }
+
+    // A native hole is transparent and passes input through, without a layered WPF window or frame copies.
+    private void SetEmptyRegion(int width, int height, NativeBounds slot)
+    {
+        var shape = (width, height, slot);
+        if (_emptyRegion.Equals(shape)) return;
+        var outer = CreateRectRgn(0, 0, width, height);
+        var inner = CreateRectRgn(slot.Left, slot.Top, slot.Right, slot.Bottom);
+        _applyingRegion = true;
+        try
+        {
+            if (outer == 0 || inner == 0 || CombineRgn(outer, outer, inner, 4) == 0 || SetWindowRgn(_handle, outer, true) == 0)
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            outer = 0; // Windows owns the region after SetWindowRgn succeeds.
+            _emptyRegion = shape;
+        }
+        finally
+        {
+            _applyingRegion = false;
+            if (inner != 0) DeleteObject(inner);
+            if (outer != 0) DeleteObject(outer);
+        }
     }
 
     public void ReleaseVideo(bool restoreVideo = true)
@@ -202,7 +250,7 @@ public partial class PipFrameWindow : Window
         PipWindowService.UnregisterFrame(_video.VideoWindow);
         _video.Release(restoreVideo);
         _video = null;
-        _layout = null;
+        UpdateVideo();
     }
 
     private void Video_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -212,7 +260,11 @@ public partial class PipFrameWindow : Window
         if (GetCursorPos(out var cursor))
             SendMessage(_handle, 0x00A1, 2, (nint)((cursor.Y << 16) | (cursor.X & 0xffff)));
     }
-    private void CloseVideo_Click(object sender, RoutedEventArgs e) => CloseVideo();
+    private void CloseVideo_Click(object sender, RoutedEventArgs e)
+    {
+        if (CloseRequested is { } close) close();
+        else { CloseVideo(); Hide(); }
+    }
     public void CloseVideo()
     {
         if (VideoWindowHandle != 0) PostMessage(VideoWindowHandle, 0x0010, 0, 0);
@@ -245,4 +297,8 @@ public partial class PipFrameWindow : Window
     [DllImport("user32.dll")] private static extern nint SendMessage(nint window, int message, nint wParam, nint lParam);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] private static extern bool PostMessage(nint window, int message, nint wParam, nint lParam);
+    [DllImport("user32.dll", SetLastError = true)] private static extern int SetWindowRgn(nint window, nint region, bool redraw);
+    [DllImport("gdi32.dll", SetLastError = true)] private static extern nint CreateRectRgn(int left, int top, int right, int bottom);
+    [DllImport("gdi32.dll")] private static extern int CombineRgn(nint destination, nint first, nint second, int mode);
+    [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint handle);
 }

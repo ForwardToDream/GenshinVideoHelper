@@ -76,6 +76,7 @@ public partial class MainWindow : Window
         StateChanged += OnWindowStateChanged;
         _poll.Tick += async (_, _) => { Services.Progress.SaveIfDue(); await PollAsync(); };
         Services.Follow.Changed += DisplayFollow;
+        _pipMouseVisibility.Changed += OnPipChanged;
         if (Services.VideoActivity is { } activity) activity.MediaActivity += OnMediaActivity;
         if (Services.VideoActivity is IVideoFrameInvalidationSource source) source.VideoFrameInvalidated += OnVideoFrameInvalidated;
         Loaded += async (_, _) => { if (!_closing) await Services.WarmupAsync(); };
@@ -141,6 +142,7 @@ public partial class MainWindow : Window
         ApplyHotkeys();
         _poll.Start();
         Services.Pip.HelperWindow = new WindowInteropHelper(this).Handle;
+        Services.Pip.OpenFrame();
         _tray = new TrayIconService(this, RestoreFromTray, Close);
     }
 
@@ -195,6 +197,7 @@ public partial class MainWindow : Window
         if (_selectedInfo?.Bvid == identity.Bvid && !_selectedInfo.Episodes.Any(p => p.Number == identity.Part))
         { SetStatus($"此视频没有 P{identity.Part}，请选择有效分集。", true); return; }
         AppLog.Info("App", $"用户开始跟随 {identity.Bvid} P{identity.Part}。");
+        Services.Pip.OpenFrame();
         // Capture the mode at the click: changing libraries while opening must not change its origin.
         var manual = _settings.SelectedVideoLibraryId is null;
         var loginIntent = ++_loginIntent;
@@ -225,8 +228,43 @@ public partial class MainWindow : Window
     private async Task NavigateActiveEpisodeAsync(int part) { AppLog.Info("App", $"用户切换到 P{part}。"); await Services.Follow.NavigateAsync(part); await PollAsync(); }
     private Task PollAsync() => Services.Follow.PollAsync();
     private Task ControlAsync(VideoCommand command) => Services.Follow.ExecuteAsync(command);
-    private Task TogglePipAsync() => ControlAsync(new("pip"));
-    private Task PlacePipAsync() => Services.Follow.PlacePipAsync();
+    private async Task TogglePipAsync()
+    {
+        if (_pipMouseVisibility.IsOpen)
+        {
+            Services.Follow.Session.Suppress();
+            _pipMouseVisibility.CloseCurrent();
+            if (_page is not null && _state?.PictureInPicture == true) await ControlAsync(new("ensurePipClosed"));
+        }
+        else
+        {
+            Services.Pip.OpenFrame();
+            if (_page is not null && _state is not null) await ControlAsync(new("ensurePip"));
+        }
+    }
+
+    private Task PlacePipAsync()
+    {
+        if (!_pipMouseVisibility.IsOpen) { SetStatus("请先开启画中画。", true); return Task.CompletedTask; }
+        var ratio = _state is { VideoHeight: > 0 } state ? (double)state.VideoWidth / state.VideoHeight : _pipMouseVisibility.Layout?.AspectRatio ?? 16d / 9;
+        Services.Pip.PlaceFrame(ratio);
+        return Task.CompletedTask;
+    }
+
+    private void OnPipChanged()
+    {
+        if (_closing) return;
+        if (!_pipMouseVisibility.IsOpen) Services.Follow.Session.Suppress();
+        UpdatePipControls();
+        UpdateVisionIntent();
+    }
+
+    private void UpdatePipControls()
+    {
+        PipButton.Content = _pipMouseVisibility.IsOpen ? "关闭画中画" : "开启画中画";
+        PipStateText.Text = !_pipMouseVisibility.IsOpen ? "浮窗已关闭" :
+            _pipMouseVisibility.WindowHandle == 0 ? "浮窗已开启 · 等待视频" : "浮窗已开启 · 置顶";
+    }
 
     private void RememberIdentity(VideoIdentity identity)
     {
@@ -262,10 +300,9 @@ public partial class MainWindow : Window
         TimeLabel.Text = $"{FormatTime(state.CurrentTime)} / {(state.Duration is { } duration ? FormatTime(duration) : "直播")}";
         PlaybackLabel.Text = state.Paused ? "已暂停" : $"播放中 · {state.PlaybackRate:0.##}×";
         PlayButton.Content = state.Paused ? "继续播放" : "暂停播放";
-        PipButton.Content = state.PictureInPicture ? "关闭画中画" : "开启画中画";
+        UpdatePipControls();
         MuteButton.Content = state.Muted ? "取消静音" : "静音";
         HeaderConnectionState.Text = "视频已连接";
-        PipStateText.Text = state.PictureInPicture ? "浮窗已开启 · 置顶" : "浮窗尚未开启";
         UpdatePlaybackPreferenceText(state.PlaybackRate);
         _updatingControls = true;
         try
@@ -289,9 +326,8 @@ public partial class MainWindow : Window
         TimeLabel.Text = "--:-- / --:--";
         PlaybackLabel.Text = "等待视频";
         PlayButton.Content = "播放 / 暂停";
-        PipButton.Content = "开启画中画";
+        UpdatePipControls();
         HeaderConnectionState.Text = _page is null ? "等待开始" : "等待视频";
-        PipStateText.Text = "视频就绪后开启浮窗";
         UpdatePlaybackPreferenceText(1);
     }
 
@@ -473,6 +509,7 @@ public partial class MainWindow : Window
 
         if (Services.VideoActivity is { } activity) activity.MediaActivity -= OnMediaActivity;
         if (Services.VideoActivity is IVideoFrameInvalidationSource source) source.VideoFrameInvalidated -= OnVideoFrameInvalidated;
+        _pipMouseVisibility.Changed -= OnPipChanged;
         if (Services.Browser is Infrastructure.Browser.BrowserSessionManager manager) manager.ActiveBrowserChanged -= OnActiveBrowserChanged;
         DisposeProgress();
         _mapOverlay?.Dispose();
