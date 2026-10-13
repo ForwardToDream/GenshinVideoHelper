@@ -2,8 +2,6 @@ using System.Text.Json.Serialization;
 
 namespace GenshinVideoHelper.Core.Progress;
 
-/// <summary>Who decides completion: the watched coverage, or an explicit choice by the user that tracking never overrides.</summary>
-public enum ProgressMark { Auto, Completed, NotCompleted }
 public enum EpisodeStatus { NotStarted, InProgress, Completed }
 
 public sealed record EpisodeProgress(long Cid, int Part, string Title, double Duration)
@@ -11,21 +9,15 @@ public sealed record EpisodeProgress(long Cid, int Part, string Title, double Du
     public IReadOnlyList<WatchSegment> Segments { get; init; } = [];
     /// <summary>Where the viewer last settled; the resume point.</summary>
     public double Position { get; init; }
-    public ProgressMark Mark { get; init; }
-    /// <summary>Set when coverage first reached the completion ratio; tracking never clears it.</summary>
+    /// <summary>Set while watched coverage reaches the service's completion ratio.</summary>
     public DateTimeOffset? CompletedAt { get; init; }
     public DateTimeOffset? UpdatedAt { get; init; }
 
     [JsonIgnore] public double Watched => WatchSegments.Covered(Segments);
     [JsonIgnore] public double Coverage => WatchSegments.Coverage(Segments, Duration);
     [JsonIgnore] public bool HasActivity => Segments.Count > 0 || Position > 0;
-    [JsonIgnore] public bool IsManual => Mark != ProgressMark.Auto;
-    [JsonIgnore] public EpisodeStatus Status => Mark switch
-    {
-        ProgressMark.Completed => EpisodeStatus.Completed,
-        ProgressMark.Auto when CompletedAt is not null => EpisodeStatus.Completed,
-        _ => HasActivity ? EpisodeStatus.InProgress : EpisodeStatus.NotStarted
-    };
+    [JsonIgnore] public EpisodeStatus Status => CompletedAt is not null ? EpisodeStatus.Completed :
+        HasActivity ? EpisodeStatus.InProgress : EpisodeStatus.NotStarted;
 }
 
 public sealed record VideoProgress(string Bvid, string Title)
@@ -39,7 +31,7 @@ public sealed record VideoProgress(string Bvid, string Title)
     public bool PartsKnown { get; init; }
 
     [JsonIgnore] public int Completed => Episodes.Count(episode => episode.Status == EpisodeStatus.Completed);
-    [JsonIgnore] public bool HasProgress => Episodes.Any(episode => episode.HasActivity || episode.IsManual);
+    [JsonIgnore] public bool HasProgress => Episodes.Any(episode => episode.HasActivity);
     public EpisodeProgress? Find(long cid) => Episodes.FirstOrDefault(episode => episode.Cid == cid);
     public EpisodeProgress? FindPart(int part) => Episodes.FirstOrDefault(episode => episode.Part == part);
 }
@@ -76,8 +68,7 @@ public sealed record ProgressDocument
             {
                 Title = episode.Title ?? "", Duration = duration,
                 Segments = WatchSegments.Normalize(episode.Segments, duration),
-                Position = duration > 0 ? Math.Min(position, duration) : position,
-                Mark = Enum.IsDefined(episode.Mark) ? episode.Mark : ProgressMark.Auto
+                Position = duration > 0 ? Math.Min(position, duration) : position
             };
         });
 }

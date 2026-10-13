@@ -19,7 +19,7 @@ public sealed class JsonProgressStoreTests : IDisposable
                 UpdatedAt = new DateTimeOffset(2026, 10, 8, 20, 0, 0, TimeSpan.FromHours(8)),
                 Episodes =
                 [
-                    new(40841121301, 1, "说明", 24) { Mark = ProgressMark.Completed },
+                    new(40841121301, 1, "说明", 24) { Segments = [new(0, 24)], CompletedAt = new(2026, 10, 8, 19, 0, 0, TimeSpan.FromHours(8)) },
                     new(40835484789, 3, "古兽冰原1-7", 604)
                     {
                         Segments = [new(0, 312.5), new(400, 520)], Position = position,
@@ -47,7 +47,8 @@ public sealed class JsonProgressStoreTests : IDisposable
         var video = new JsonProgressStore(FilePath).Load().Document.Videos["BV1hjgG6jEa6"];
         var expected = Sample().Videos["BV1hjgG6jEa6"];
         Assert.Equal((expected.Title, expected.UpdatedAt), (video.Title, video.UpdatedAt));
-        Assert.Equal(ProgressMark.Completed, video.FindPart(1)!.Mark);
+        Assert.Equal(24, video.FindPart(1)!.Watched);
+        Assert.DoesNotContain("\"Mark\":", File.ReadAllText(FilePath));
         var episode = video.FindPart(3)!;
         Assert.Equal((40835484789, "古兽冰原1-7", 604d, 312.5), (episode.Cid, episode.Title, episode.Duration, episode.Position));
         Assert.Equal(expected.FindPart(3)!.Segments, episode.Segments);
@@ -62,10 +63,10 @@ public sealed class JsonProgressStoreTests : IDisposable
         var text = File.ReadAllText(FilePath);
         Assert.Contains("[0, 312.5]", text);
         Assert.Contains("古兽冰原 · 全宝箱", text);
-        Assert.Contains("\"Mark\": \"Completed\"", text);
+        Assert.DoesNotContain("\"Mark\":", text);
         Assert.DoesNotContain("Coverage", text);
-        // Of three stored parts only two have spans and one a resume point; the untouched one carries no empty fields.
-        Assert.Equal(2, text.Split("\"Segments\"").Length - 1);
+        // Completed parts carry watched spans, not a separate manual completion flag.
+        Assert.Equal(3, text.Split("\"Segments\"").Length - 1);
         Assert.Equal(1, text.Split("\"Position\"").Length - 1);
         Assert.False(File.Exists(FilePath + ".tmp"));
     }
@@ -134,7 +135,9 @@ public sealed class JsonProgressStoreTests : IDisposable
         Assert.Null(loaded.Warning);
         var episode = loaded.Document.Videos["BV1hjgG6jEa6"].FindPart(2)!;
         Assert.Equal([new WatchSegment(0, 80), new WatchSegment(90, 100)], episode.Segments);
-        Assert.Equal((100d, ProgressMark.NotCompleted, ""), (episode.Position, episode.Mark, episode.Title));
+        Assert.Equal((100d, ""), (episode.Position, episode.Title));
+        var progress = new WatchProgressService(new JsonProgressStore(FilePath));
+        Assert.Equal(EpisodeStatus.Completed, progress.Get("BV1hjgG6jEa6")!.FindPart(2)!.Status);
     }
 
     [Fact]

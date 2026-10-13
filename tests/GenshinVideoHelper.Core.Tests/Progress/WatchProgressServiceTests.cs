@@ -66,24 +66,27 @@ public sealed class WatchProgressServiceTests
     }
 
     [Fact]
-    public void ManualNotCompleted_HoldsUntilAutomaticJudgementIsRestored()
+    public void RemovedWatchedRange_BecomesCompletedAgainAfterPlayback()
     {
-        Assert.True(_progress.SetMark(Bvid, Cid(3), ProgressMark.NotCompleted));
-        Watch(3).Play(Duration);
+        _progress.MarkWatched(Bvid, Cid(3), 0, Duration);
+        _progress.MarkUnwatched(Bvid, Cid(3), 500, Duration);
         Assert.Equal(EpisodeStatus.InProgress, Episode(3).Status);
-        Assert.True(Episode(3).IsManual);
+        Watch(3).Seek(500).Play(100);
         Assert.Equal(1, Episode(3).Coverage, 2);
-        Assert.True(_progress.SetMark(Bvid, Cid(3), ProgressMark.Auto));
         Assert.Equal(EpisodeStatus.Completed, Episode(3).Status);
     }
 
     [Fact]
-    public void ManualCompleted_IsNotUndoneByTracking()
+    public void ChangedDuration_RecalculatesCompletionInBothDirections()
     {
-        _progress.SetMark(Bvid, Cid(3), ProgressMark.Completed);
-        Watch(3).Play(10).Seek(300).Play(10);
+        _progress.MarkWatched(Bvid, Cid(3), 0, 540);
         Assert.Equal(EpisodeStatus.Completed, Episode(3).Status);
-        Assert.Equal(20, Episode(3).Watched, 1);
+        _progress.Describe(Info(part => new(part, Cid(part), "Part " + part, part == 3 ? 900 : Duration)));
+        Assert.Equal(EpisodeStatus.InProgress, Episode(3).Status);
+        Assert.Null(Episode(3).CompletedAt);
+        _progress.Describe(Info(part => new(part, Cid(part), "Part " + part, part == 3 ? 420 : Duration)));
+        Assert.Equal(EpisodeStatus.Completed, Episode(3).Status);
+        Assert.Equal(420, Episode(3).Watched);
     }
 
     [Fact]
@@ -104,6 +107,7 @@ public sealed class WatchProgressServiceTests
         var before = Episode(1);
         Assert.True(_progress.CompleteBefore(Bvid, 3));
         Assert.All([1, 2], part => Assert.Equal(EpisodeStatus.Completed, Episode(part).Status));
+        Assert.All([1, 2], part => Assert.Equal(1, Episode(part).Coverage));
         Assert.All([3, 4], part => Assert.Equal(EpisodeStatus.NotStarted, Episode(part).Status));
         Assert.Contains("P3", _progress.UndoDescription);
         Assert.True(_progress.Undo());
@@ -124,17 +128,39 @@ public sealed class WatchProgressServiceTests
         Assert.All(_progress.Get(Bvid)!.Episodes, episode => Assert.Equal(EpisodeStatus.NotStarted, episode.Status));
         Assert.True(_progress.Undo());
         Assert.Equal(4, _progress.Get(Bvid)!.Completed);
-        Assert.Equal(50, Episode(2).Watched, 1);
+        Assert.All(_progress.Get(Bvid)!.Episodes, episode => Assert.Equal(1, episode.Coverage));
     }
 
     [Fact]
-    public void ResetEpisode_ClearsSpansPositionAndMark()
+    public void BulkCompletion_UnknownDurationDoesNotInventWatchedCoverage()
     {
-        Watch(3).Play(40);
-        _progress.SetMark(Bvid, Cid(3), ProgressMark.Completed);
-        Assert.True(_progress.ResetEpisode(Bvid, Cid(3)));
-        Assert.Equal(new EpisodeProgress(Cid(3), 3, "Part 3", Duration) { UpdatedAt = Episode(3).UpdatedAt }, Episode(3) with { Segments = [] });
+        _progress.Describe(Info(part => new(part, Cid(part), "Part " + part, part == 3 ? 0 : Duration)));
+        Assert.True(_progress.CompleteAll(Bvid));
+        Assert.Equal(3, _progress.Get(Bvid)!.Completed);
+        Assert.Equal(EpisodeStatus.NotStarted, Episode(3).Status);
         Assert.Empty(Episode(3).Segments);
+    }
+
+    [Theory]
+    [InlineData(0.9, EpisodeStatus.Completed)]
+    [InlineData(0.95, EpisodeStatus.InProgress)]
+    public void Load_RecalculatesCompletionFromCoverageAndConfiguredRatio(double ratio, EpisodeStatus expected)
+    {
+        var store = new FakeProgressStore
+        {
+            Document = new() { Videos = new Dictionary<string, VideoProgress>
+            {
+                [Bvid] = new(Bvid, "test") { Episodes = [
+                    new(Cid(1), 1, "empty", Duration) { CompletedAt = _clock.GetUtcNow() },
+                    new(Cid(2), 2, "watched", Duration) { Segments = [new(0, 540)] }]
+                }
+            } }
+        };
+        var service = new WatchProgressService(store, ratio, _clock);
+        Assert.Equal(EpisodeStatus.NotStarted, service.Get(Bvid)!.FindPart(1)!.Status);
+        Assert.Equal(expected, service.Get(Bvid)!.FindPart(2)!.Status);
+        service.Flush();
+        Assert.Equal(service.Get(Bvid)!.Episodes, store.Document.Videos[Bvid].Episodes);
     }
 
     [Fact]
@@ -239,7 +265,7 @@ public sealed class WatchProgressServiceTests
     {
         _progress.SetPosition(Bvid, Cid(3), position);
         Assert.Equal(expected, _progress.ResumePosition(new(Bvid, 3)));
-        _progress.SetMark(Bvid, Cid(3), ProgressMark.Completed);
+        _progress.MarkWatched(Bvid, Cid(3), 0, Duration);
         Assert.Null(_progress.ResumePosition(new(Bvid, 3)));
         Assert.Null(_progress.ResumePosition(new(Bvid, 9)));
     }
@@ -249,7 +275,7 @@ public sealed class WatchProgressServiceTests
     {
         Assert.Null(_progress.FirstUnfinishedPart(Bvid, out var all));
         Assert.False(all);
-        _progress.SetMark(Bvid, Cid(1), ProgressMark.Completed);
+        _progress.MarkWatched(Bvid, Cid(1), 0, Duration);
         Watch(2).Play(20);
         Assert.Equal(2, _progress.FirstUnfinishedPart(Bvid, out all));
         Assert.False(all);
@@ -273,7 +299,7 @@ public sealed class WatchProgressServiceTests
                         Episodes =
                         [
                             new(Cid(2), 2, null!, Duration) { Segments = [new(400, 9000), new(-50, 30), new(20, 60), new(double.NaN, 5)], Position = double.NaN },
-                            new(Cid(1), 1, "Part 1", double.NaN) { Position = -3, Mark = (ProgressMark)42 },
+                            new(Cid(1), 1, "Part 1", double.NaN) { Position = -3 },
                             new(Cid(1), 1, "duplicate", Duration),
                             new(5, 0, "invalid part", Duration)
                         ],
@@ -287,7 +313,7 @@ public sealed class WatchProgressServiceTests
         Assert.Equal([1, 2], video.Episodes.Select(episode => episode.Part));
         Assert.Equal([new WatchSegment(0, 60), new WatchSegment(400, Duration)], video.FindPart(2)!.Segments);
         Assert.Equal(0, video.FindPart(2)!.Position);
-        Assert.Equal((0d, 0d, ProgressMark.Auto), (video.FindPart(1)!.Duration, video.FindPart(1)!.Position, video.FindPart(1)!.Mark));
+        Assert.Equal((0d, 0d), (video.FindPart(1)!.Duration, video.FindPart(1)!.Position));
         Assert.Empty(video.Retired);
     }
 }

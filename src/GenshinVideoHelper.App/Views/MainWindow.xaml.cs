@@ -392,6 +392,7 @@ public partial class MainWindow : Window
     {
         StatusText.Text = message;
         StatusText.Foreground = (Brush)FindResource(error ? "WarningBrush" : "SuccessBrush");
+        StatusText.Visibility = error ? Visibility.Visible : Visibility.Collapsed;
     }
     internal void ReportInternalError(Exception exception) =>
         SetStatus($"发生内部错误，已写入日志：{exception.Message}", true);

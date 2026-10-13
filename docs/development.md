@@ -91,7 +91,7 @@ Chrome 与 Edge 共用 CDP、媒体命令、登录检查、高清采集及浮窗
 
 [ProgressTracker](../src/GenshinVideoHelper.Core/Progress/ProgressTracker.cs) 只累计通过身份校验的连续播放采样，保存每集已看区间的并集。跳转、暂停、断连及身份变更切断采样连续性。
 
-[WatchProgressService](../src/GenshinVideoHelper.Core/Progress/WatchProgressService.cs) 管覆盖率、续播点、手动状态、批量操作与撤销。默认覆盖率 90% 才自动完成；不能按播放头、后续分集或最大 P 推断已看内容。手动完成 / 未完成优先，恢复自动判定后才由覆盖率决定。
+[WatchProgressService](../src/GenshinVideoHelper.Core/Progress/WatchProgressService.cs) 管覆盖率、续播点、区间编辑、批量操作与撤销。完成状态只由已看比例计算，默认 90%；加载、时长变化和区间编辑都重新判定。批量完成填充已看区间，不能按播放头、后续分集或最大 P 推断已看内容。
 
 ## 数据与默认值
 
@@ -100,7 +100,7 @@ Chrome 与 Edge 共用 CDP、媒体命令、登录检查、高清采集及浮窗
 | 路径 | 内容 |
 | --- | --- |
 | `config.json` | `AppSettings`、热键、库选择、最近分 P 链接、浮窗布局 |
-| `progress.json` | 每集已看区间、续播点、手动状态 |
+| `progress.json` | 每集已看区间、续播点、完成时间 |
 | `Chrome/`、`Edge/` | 各浏览器专用配置与登录状态 |
 | `logs/app.log` | 应用日志；1 MB 滚动，当前文件加 3 个旧文件 |
 

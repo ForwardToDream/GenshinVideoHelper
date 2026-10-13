@@ -23,6 +23,8 @@ public partial class MainWindow
     private string? _progressBvid;
     private long? _progressCid;
     private bool _updatingProgress, _loadingProgressParts;
+    private bool _updatingProgressPosition;
+    private (string? Bvid, long? Cid) _progressEditorIdentity;
     private Func<bool>? _pendingProgressAction;
 
     private WatchProgressService Progress => Services.Progress;
@@ -56,7 +58,7 @@ public partial class MainWindow
         private double _duration;
         private IReadOnlyList<WatchSegment> _segments = [];
         private Brush _dotFill = Brushes.Transparent, _dotStroke = Brushes.Transparent;
-        private Visibility _checkVisibility = Visibility.Collapsed, _manualVisibility = Visibility.Collapsed;
+        private Visibility _checkVisibility = Visibility.Collapsed;
         public long Cid { get; } = cid;
         public string Title { get => _title; set => Set(ref _title, value); }
         public string StateText { get => _stateText; set => Set(ref _stateText, value); }
@@ -66,7 +68,6 @@ public partial class MainWindow
         public Brush DotFill { get => _dotFill; set => Set(ref _dotFill, value); }
         public Brush DotStroke { get => _dotStroke; set => Set(ref _dotStroke, value); }
         public Visibility CheckVisibility { get => _checkVisibility; set => Set(ref _checkVisibility, value); }
-        public Visibility ManualVisibility { get => _manualVisibility; set => Set(ref _manualVisibility, value); }
     }
 
     /// <summary>Progress text for the start page's lists. Bindings also watch <see cref="Version"/>, so one
@@ -104,12 +105,15 @@ public partial class MainWindow
         Progress.Changed += OnProgressChanged;
         Progress.SaveFailed += OnProgressSaveFailed;
         ProgressTimeline.TimeClicked += OnProgressTimeClicked;
+        ProgressTimeline.CandidatesCleared += OnProgressCandidatesCleared;
     }
 
     private void DisposeProgress()
     {
         Progress.Changed -= OnProgressChanged;
         Progress.SaveFailed -= OnProgressSaveFailed;
+        ProgressTimeline.TimeClicked -= OnProgressTimeClicked;
+        ProgressTimeline.CandidatesCleared -= OnProgressCandidatesCleared;
     }
 
     private void OnProgressSaveFailed(string message) => SetStatus($"进度未能保存，稍后自动重试：{message}", true);
@@ -232,7 +236,6 @@ public partial class MainWindow
             item.Duration = episode.Duration;
             item.Segments = episode.Segments;
             item.StateText = episode.Status == EpisodeStatus.Completed ? "完成" : episode.Segments.Count > 0 ? Percent(episode.Coverage) : "";
-            item.ManualVisibility = episode.IsManual ? Visibility.Visible : Visibility.Collapsed;
             item.CheckVisibility = episode.Status == EpisodeStatus.Completed ? Visibility.Visible : Visibility.Collapsed;
             item.DotStroke = episode.Status switch
             {
@@ -250,19 +253,14 @@ public partial class MainWindow
         ProgressEmptyText.Text = _progressBvid is null ? "开始跟随视频后，这里会显示每一集看到了哪里。" :
             _progressLoadFailed.Contains(_progressBvid) ? "分集读取失败，请检查网络后重新打开本页。" : "正在读取分集…";
         var selected = episodes.FirstOrDefault(episode => episode.Cid == _progressCid);
-        ProgressCompleteBeforeButton.IsEnabled = selected is not null && episodes.Any(episode => episode.Part < selected.Part && episode.Status != EpisodeStatus.Completed);
-        ProgressCompleteAllButton.IsEnabled = episodes.Any(episode => episode.Status != EpisodeStatus.Completed);
-        ProgressResetVideoButton.IsEnabled = episodes.Any(episode => episode.HasActivity || episode.IsManual);
+        ProgressCompleteBeforeButton.IsEnabled = selected is not null && episodes.Any(episode => episode.Duration > 0 && episode.Part < selected.Part && episode.Status != EpisodeStatus.Completed);
+        ProgressCompleteAllButton.IsEnabled = episodes.Any(episode => episode.Duration > 0 && episode.Status != EpisodeStatus.Completed);
+        ProgressResetVideoButton.IsEnabled = episodes.Any(episode => episode.HasActivity);
     }
 
     private string Describe(EpisodeProgress episode)
     {
-        var state = episode.Mark switch
-        {
-            ProgressMark.Completed => "手动标记完成",
-            ProgressMark.NotCompleted => "手动标记未完成",
-            _ => episode.Status == EpisodeStatus.Completed ? "已完成" : episode.HasActivity ? "进行中" : "未开始"
-        };
+        var state = episode.Status == EpisodeStatus.Completed ? "已完成" : episode.HasActivity ? "进行中" : "未开始";
         var watched = episode.Segments.Count > 0 ? $" · 已看 {TimeText.Format(episode.Watched)}（{Percent(episode.Coverage)}）" : "";
         var resume = episode.Position > 0 ? $" · 续播点 {TimeText.Format(episode.Position)}" : "";
         return $"{state} · 时长 {TimeText.Format(episode.Duration)}{watched}{resume}";
@@ -274,19 +272,29 @@ public partial class MainWindow
     private void RefreshProgressEditor()
     {
         var episode = SelectedProgressEpisode;
+        var identity = (_progressBvid, _progressCid);
+        var identityChanged = _progressEditorIdentity != identity;
+        if (identityChanged)
+        {
+            _progressEditorIdentity = identity;
+            ProgressTimeline.CandidatePosition = double.NaN;
+        }
         ProgressEditor.IsEnabled = episode is not null;
         ProgressEditorTitle.Text = episode is null ? "选择一个分集查看和修改进度" : $"P{episode.Part} · {episode.Title}";
         ProgressEditorState.Text = episode is null ? "" : Describe(episode);
         ProgressTimeline.Segments = episode?.Segments;
         ProgressTimeline.Duration = episode?.Duration ?? 0;
         ProgressTimeline.Position = episode?.Position ?? double.NaN;
+        if (episode is null || episode.Duration <= 0 || ProgressTimeline.CandidatePosition > episode.Duration)
+            ProgressTimeline.CandidatePosition = double.NaN;
         ProgressTimelineEnd.Text = episode is null ? "" : TimeText.Format(episode.Duration);
         // Never overwrite what the user is typing with the position of a playing video.
-        if (!ProgressPositionInput.IsKeyboardFocusWithin) ProgressPositionInput.Text = episode is { Position: > 0 } ? TimeText.Format(episode.Position) : "";
-        ProgressCompleteButton.IsEnabled = episode is not null && episode.Mark != ProgressMark.Completed;
-        ProgressIncompleteButton.IsEnabled = episode is not null && episode.Mark != ProgressMark.NotCompleted;
-        ProgressAutoButton.IsEnabled = episode is { IsManual: true };
-        ProgressResetEpisodeButton.IsEnabled = episode is not null && (episode.HasActivity || episode.IsManual);
+        if (identityChanged || (!ProgressPositionInput.IsKeyboardFocusWithin && !double.IsFinite(ProgressTimeline.CandidatePosition)))
+        {
+            _updatingProgressPosition = true;
+            try { ProgressPositionInput.Text = episode is { Position: > 0 } ? TimeText.Format(episode.Position) : ""; }
+            finally { _updatingProgressPosition = false; }
+        }
         ProgressUndoButton.IsEnabled = Progress.UndoDescription is not null;
         ProgressUndoButton.ToolTip = Progress.UndoDescription is { } description ? $"撤销：{description}" : "没有可撤销的手动修改";
     }
@@ -361,12 +369,34 @@ public partial class MainWindow
             ProgressRangeEnd.Text = TimeText.Format(ProgressTimeline.SelectionEnd);
         }
         finally { _updatingProgress = false; }
+        SetStatus("");
     }
 
     private void OnProgressTimeClicked(double seconds)
     {
         ProgressPositionInput.Text = TimeText.Format(seconds);
-        SetStatus($"已选中 {TimeText.Format(seconds)}，点击“设为续播点”保存；拖动可以选出一段。");
+        ProgressTimeline.CandidatePosition = seconds;
+        SetStatus("");
+    }
+
+    private void OnProgressCandidatesCleared(object? sender, EventArgs e)
+    {
+        ClearProgressRange();
+        _updatingProgressPosition = true;
+        try
+        {
+            ProgressPositionInput.Text = SelectedProgressEpisode is { Position: > 0 } episode
+                ? TimeText.Format(episode.Position) : "";
+        }
+        finally { _updatingProgressPosition = false; }
+        SetStatus("");
+    }
+
+    private void ProgressPositionInput_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_ready || _updatingProgressPosition) return;
+        ProgressTimeline.CandidatePosition = TimeText.TryParse(ProgressPositionInput.Text, out var position) &&
+            SelectedProgressEpisode is { Duration: > 0 } episode && position <= episode.Duration ? position : double.NaN;
     }
 
     private void ProgressRange_TextChanged(object sender, TextChangedEventArgs e)
@@ -409,6 +439,8 @@ public partial class MainWindow
         { SetStatus($"续播时间超出了本集时长 {TimeText.Format(episode.Duration)}。", true); return; }
         SetStatus(Progress.SetPosition(bvid, episode.Cid, position)
             ? $"P{episode.Part} 的续播点已设为 {TimeText.Format(position)}。" : $"P{episode.Part} 的续播点已经是 {TimeText.Format(position)}。");
+        ProgressTimeline.CandidatePosition = double.NaN;
+        RefreshProgressEditor();
     }
 
     private void ProgressPositionInput_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -418,33 +450,17 @@ public partial class MainWindow
         ProgressSetPosition_Click(sender, e);
     }
 
-    private void ProgressComplete_Click(object sender, RoutedEventArgs e) => ApplyProgressMark(ProgressMark.Completed, "已标记为完成");
-    private void ProgressIncomplete_Click(object sender, RoutedEventArgs e) => ApplyProgressMark(ProgressMark.NotCompleted, "已固定为未完成，看完后也不会自动完成");
-    private void ProgressAuto_Click(object sender, RoutedEventArgs e) => ApplyProgressMark(ProgressMark.Auto, "已恢复按观看时长自动判定");
-
-    private void ApplyProgressMark(ProgressMark mark, string result)
-    {
-        if (_progressBvid is not { } bvid || SelectedProgressEpisode is not { } episode) return;
-        if (Progress.SetMark(bvid, episode.Cid, mark)) SetStatus($"P{episode.Part} {result}。");
-    }
-
-    private void ProgressResetEpisode_Click(object sender, RoutedEventArgs e)
-    {
-        if (_progressBvid is not { } bvid || SelectedProgressEpisode is not { } episode) return;
-        if (Progress.ResetEpisode(bvid, episode.Cid)) SetStatus($"P{episode.Part} 的记录已清空，可点“撤销”恢复。");
-    }
-
     private void ProgressCompleteBefore_Click(object sender, RoutedEventArgs e)
     {
         if (_progressBvid is not { } bvid || SelectedProgressEpisode is not { } episode || Progress.Get(bvid) is not { } video) return;
-        var count = video.Episodes.Count(item => item.Part < episode.Part && item.Status != EpisodeStatus.Completed);
+        var count = video.Episodes.Count(item => item.Duration > 0 && item.Part < episode.Part && item.Status != EpisodeStatus.Completed);
         ConfirmProgressAction($"把 P{episode.Part} 之前的 {count} 集标记为已完成？", () => Progress.CompleteBefore(bvid, episode.Part), $"P{episode.Part} 之前的 {count} 集已标记完成");
     }
 
     private void ProgressCompleteAll_Click(object sender, RoutedEventArgs e)
     {
         if (_progressBvid is not { } bvid || Progress.Get(bvid) is not { } video) return;
-        var count = video.Episodes.Count(item => item.Status != EpisodeStatus.Completed);
+        var count = video.Episodes.Count(item => item.Duration > 0 && item.Status != EpisodeStatus.Completed);
         ConfirmProgressAction($"把这张地图剩下的 {count} 集全部标记为已完成？", () => Progress.CompleteAll(bvid), $"{count} 集已标记完成");
     }
 
@@ -490,19 +506,4 @@ public partial class MainWindow
         if (Progress.Undo()) SetStatus($"已撤销：{description}。");
     }
 
-    private async void ProgressFollow_Click(object sender, RoutedEventArgs e)
-    {
-        if (_progressBvid is not { } bvid || SelectedProgressEpisode is not { } episode) return;
-        var identity = new VideoIdentity(bvid, episode.Part);
-        AppLog.Info("App", $"用户从进度页开始跟随 {bvid} P{episode.Part}。");
-        NavFollow.IsChecked = true;
-        if (_page is not null && Services.Follow.Session.Current?.Identity is { } current && current.Bvid == bvid && _info?.Bvid == bvid)
-        {
-            // Already following this video: change part in the same tab.
-            if (current.Part != episode.Part) await NavigateActiveEpisodeAsync(episode.Part);
-            return;
-        }
-        UrlInput.Text = identity.Url;
-        await OpenVideoAsync();
-    }
 }

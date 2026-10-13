@@ -314,13 +314,12 @@
           <Grid>
            <ListBox x:Name="ProgressEpisodeList" Style="{StaticResource LibraryPickerList}" ItemContainerStyle="{StaticResource CompactListItem}" SelectionChanged="ProgressEpisodeList_SelectionChanged" AutomationProperties.Name="分集进度">
             <ListBox.ItemTemplate><DataTemplate><Grid ToolTip="{Binding Detail}">
-             <Grid.ColumnDefinitions><ColumnDefinition Width="20" /><ColumnDefinition /><ColumnDefinition Width="104" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="42" /></Grid.ColumnDefinitions>
+             <Grid.ColumnDefinitions><ColumnDefinition Width="20" /><ColumnDefinition /><ColumnDefinition Width="104" /><ColumnDefinition Width="42" /></Grid.ColumnDefinitions>
              <Ellipse Width="9" Height="9" HorizontalAlignment="Left" VerticalAlignment="Center" Fill="{Binding DotFill}" Stroke="{Binding DotStroke}" StrokeThickness="1.5" />
              <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="{StaticResource SuccessBrush}" HorizontalAlignment="Left" VerticalAlignment="Center" Visibility="{Binding CheckVisibility}" />
              <TextBlock Grid.Column="1" Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
              <controls:WatchTimeline Grid.Column="2" Height="7" Margin="10,0,8,0" VerticalAlignment="Center" Segments="{Binding Segments}" Duration="{Binding Duration}" TrackBrush="{StaticResource BorderBrush}" WatchedBrush="{StaticResource PrimaryBrush}" />
-             <Border Grid.Column="3" Style="{StaticResource Keycap}" Padding="5,0" Margin="0,0,6,0" VerticalAlignment="Center" Visibility="{Binding ManualVisibility}"><TextBlock Text="手动" FontSize="10" Foreground="{StaticResource SecondaryTextBrush}" /></Border>
-             <TextBlock Grid.Column="4" Text="{Binding StateText}" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+             <TextBlock Grid.Column="3" Text="{Binding StateText}" FontSize="12" Foreground="{StaticResource SecondaryTextBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" />
             </Grid></DataTemplate></ListBox.ItemTemplate>
            </ListBox>
            <TextBlock x:Name="ProgressEmptyText" Style="{StaticResource SecondaryText}" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" Margin="12" Visibility="Collapsed" />
@@ -336,30 +335,28 @@
          </DockPanel>
          <controls:WatchTimeline x:Name="ProgressTimeline" Height="24" Margin="0,9,0,3" IsInteractive="True" Cursor="Hand" SelectionChanged="ProgressTimeline_SelectionChanged"
                                  TrackBrush="{StaticResource BorderBrush}" WatchedBrush="{StaticResource PrimaryBrush}" SelectionBrush="{StaticResource WarningBrush}" MarkerBrush="{StaticResource TextBrush}"
-                                 ToolTip="蓝色是已看的部分，竖线是续播点。拖动选出一段，点击选一个时间点" AutomationProperties.Name="分集时间轴" />
+                                 AutomationProperties.Name="分集时间轴" />
          <DockPanel>
           <TextBlock x:Name="ProgressTimelineEnd" DockPanel.Dock="Right" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" />
           <TextBlock Text="00:00" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" />
          </DockPanel>
-         <WrapPanel Margin="0,6,0,0">
-          <TextBlock Text="选区" VerticalAlignment="Center" Margin="0,0,7,5" />
-          <TextBox x:Name="ProgressRangeStart" Width="70" Padding="8,5" Margin="0,0,5,5" TextChanged="ProgressRange_TextChanged" AutomationProperties.Name="选区开始时间" ToolTip="开始时间，例如 3:20" />
-          <TextBlock Text="–" VerticalAlignment="Center" Margin="0,0,5,5" />
-          <TextBox x:Name="ProgressRangeEnd" Width="70" Padding="8,5" Margin="0,0,7,5" TextChanged="ProgressRange_TextChanged" AutomationProperties.Name="选区结束时间" ToolTip="结束时间，例如 8:45" />
-          <Button x:Name="ProgressMarkWatchedButton" Content="标记已看" Style="{StaticResource SmallButton}" Margin="0,0,7,5" Click="ProgressMarkWatched_Click" />
-          <Button x:Name="ProgressMarkUnwatchedButton" Content="标记未看" Style="{StaticResource SmallButton}" Margin="0,0,18,5" Click="ProgressMarkUnwatched_Click" />
-          <TextBlock Text="续播点" VerticalAlignment="Center" Margin="0,0,7,5" />
-          <TextBox x:Name="ProgressPositionInput" Width="70" Padding="8,5" Margin="0,0,7,5" KeyDown="ProgressPositionInput_KeyDown" AutomationProperties.Name="续播位置" ToolTip="下次开始跟随时跳到这里，例如 12:34" />
-          <Button x:Name="ProgressSetPositionButton" Content="设为续播点" Style="{StaticResource SmallButton}" Margin="0,0,0,5" Click="ProgressSetPosition_Click" />
-         </WrapPanel>
-         <WrapPanel Margin="0,2,0,0">
-          <Button x:Name="ProgressCompleteButton" Content="标记完成" Style="{StaticResource SmallSubtleButton}" Margin="0,0,7,5" Click="ProgressComplete_Click" />
-          <Button x:Name="ProgressIncompleteButton" Content="标记未完成" Style="{StaticResource SmallSubtleButton}" Margin="0,0,7,5" Click="ProgressIncomplete_Click" ToolTip="固定为未完成，之后看完也不会自动完成，直到恢复自动判定" />
-          <Button x:Name="ProgressAutoButton" Content="恢复自动判定" Style="{StaticResource SmallSubtleButton}" Margin="0,0,7,5" Click="ProgressAuto_Click" />
-          <Button x:Name="ProgressResetEpisodeButton" Content="重置本集" Style="{StaticResource SmallSubtleButton}" Margin="0,0,18,5" Click="ProgressResetEpisode_Click" />
-          <Button x:Name="ProgressFollowButton" Content="从这一集开始跟随" Style="{StaticResource SmallPrimaryButton}" Margin="0,0,18,5" Click="ProgressFollow_Click" />
-          <Button x:Name="ProgressUndoButton" Content="撤销" Style="{StaticResource SmallSubtleButton}" Margin="0,0,0,5" IsEnabled="False" Click="ProgressUndo_Click" />
-         </WrapPanel>
+         <StackPanel x:Name="ProgressRangeInputs" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
+          <TextBox x:Name="ProgressRangeStart" Width="70" Padding="8,5" TextChanged="ProgressRange_TextChanged" AutomationProperties.Name="选区开始时间" ToolTip="开始时间，例如 3:20" />
+          <TextBlock Text="–" VerticalAlignment="Center" Margin="12,0" />
+          <TextBox x:Name="ProgressRangeEnd" Width="70" Padding="8,5" TextChanged="ProgressRange_TextChanged" AutomationProperties.Name="选区结束时间" ToolTip="结束时间，例如 8:45" />
+         </StackPanel>
+         <Grid Margin="0,8,0,0"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+           <Button x:Name="ProgressMarkWatchedButton" Content="标记已看" Style="{StaticResource SmallButton}" Margin="0,0,7,0" Click="ProgressMarkWatched_Click" />
+           <Button x:Name="ProgressMarkUnwatchedButton" Content="标记未看" Style="{StaticResource SmallButton}" Click="ProgressMarkUnwatched_Click" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="16,0,0,0">
+           <TextBlock Text="续播点" VerticalAlignment="Center" Margin="0,0,7,0" />
+           <TextBox x:Name="ProgressPositionInput" Width="70" Padding="8,5" Margin="0,0,7,0" KeyDown="ProgressPositionInput_KeyDown" TextChanged="ProgressPositionInput_TextChanged" AutomationProperties.Name="续播位置" ToolTip="下次开始跟随时跳到这里，例如 12:34" />
+           <Button x:Name="ProgressSetPositionButton" Content="设为续播点" Style="{StaticResource SmallButton}" Click="ProgressSetPosition_Click" />
+          </StackPanel>
+         </Grid>
+         <Button x:Name="ProgressUndoButton" Content="撤销" Style="{StaticResource SmallSubtleButton}" HorizontalAlignment="Right" Margin="0,8,0,5" IsEnabled="False" Click="ProgressUndo_Click" />
         </StackPanel>
        </Border>
       </Grid>
@@ -393,7 +390,7 @@
    </Grid>
    <Border Grid.Row="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Background="White" CornerRadius="0,0,5,5">
     <Grid Margin="16,0"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-     <TextBlock x:Name="StatusText" Text="粘贴攻略链接，点击开始跟随。" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
+     <TextBlock x:Name="StatusText" Visibility="Collapsed" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
      <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
       <Button x:Name="UpdateNoticeButton" Content="可更新" Visibility="Collapsed" Click="OpenUpdate_Click" Foreground="#D93025" FontSize="11" MinHeight="0" MinWidth="0" Padding="0" Margin="0,0,10,0" Cursor="Hand" AutomationProperties.Name="查看可更新版本">
        <Button.Template><ControlTemplate TargetType="Button"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" /></ControlTemplate></Button.Template>

@@ -253,7 +253,7 @@ internal static class UiTests
         ProgressUiTests.Run(window, root);
         ((RadioButton)window.FindName("NavFollow")).IsChecked = true;
         ((Button)window.FindName("FollowRetryButton")).Visibility = Visibility.Visible;
-        ((TextBlock)window.FindName("StatusText")).Text = "自动跟随未完成：浏览器请求被拒绝，请完成登录后重试。此处用长状态提示验证省略显示与完整悬停提示。";
+        Invoke(window, "SetStatus", "自动跟随未完成：浏览器请求被拒绝，请完成登录后重试。此处用长状态提示验证省略显示与完整悬停提示。", true);
         Capture(window, root, "ui-follow-error-compact.png", 860, 600);
         Capture(window, root, "ui-preview.png", 1020, 730);
         window.Left = -10000;

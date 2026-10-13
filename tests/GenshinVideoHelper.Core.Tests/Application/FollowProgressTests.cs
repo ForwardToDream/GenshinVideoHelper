@@ -71,7 +71,7 @@ public sealed class FollowProgressTests
     public async Task Poll_NothingWorthResuming_PlaysFromWhereThePlayerIs(double position, bool completed)
     {
         _progress.SetPosition(Identity.Bvid, Cid, position);
-        if (completed) _progress.SetMark(Identity.Bvid, Cid, ProgressMark.Completed);
+        if (completed) _progress.MarkWatched(Identity.Bvid, Cid, 0, _progress.Get(Identity.Bvid, Cid)!.Duration);
         using var follow = Create();
         await follow.OpenAsync(Identity);
         await follow.PollAsync();

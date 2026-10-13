@@ -23,7 +23,7 @@ public sealed class JsonProgressStore(string path) : IProgressStore
         // Most parts of most videos are untouched; leaving out their defaults keeps the file short enough to edit by hand.
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
         TypeInfoResolver = new DefaultJsonTypeInfoResolver { Modifiers = { OmitEmptyLists } },
-        Converters = { new JsonStringEnumConverter(), new SegmentConverter() }
+        Converters = { new SegmentConverter() }
     };
 
     private static void OmitEmptyLists(JsonTypeInfo type)

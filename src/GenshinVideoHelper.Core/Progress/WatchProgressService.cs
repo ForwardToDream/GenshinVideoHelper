@@ -40,6 +40,13 @@ public sealed class WatchProgressService
         var loaded = store?.Load();
         LoadWarning = loaded?.Warning;
         _videos = new(loaded?.Document.Normalize().Videos ?? new Dictionary<string, VideoProgress>(), StringComparer.Ordinal);
+        foreach (var (bvid, video) in _videos.ToArray())
+        {
+            var episodes = video.Episodes.Select(Judge).ToArray();
+            var retired = video.Retired.Select(Judge).ToArray();
+            if (!episodes.SequenceEqual(video.Episodes) || !retired.SequenceEqual(video.Retired)) _dirty = true;
+            _videos[bvid] = video with { Episodes = episodes, Retired = retired };
+        }
         if (store is not null) AppLog.Info("Progress", $"进度已加载：{_videos.Count} 个视频，{_videos.Values.Sum(video => video.Completed)} 集已完成，完成线 {CompletionRatio:P0}。");
         _lastSave = _clock.GetTimestamp();
     }
@@ -64,14 +71,14 @@ public sealed class WatchProgressService
             if (match is null) { episodes.Add(new(part.Cid, part.Number, part.Title, part.Duration)); continue; }
             pool.Remove(match);
             var resized = part.Duration > 0 && Math.Abs(match.Duration - part.Duration) > 0.05;
-            episodes.Add(match with
+            episodes.Add(Judge(match with
             {
                 Cid = part.Cid, Part = part.Number, Title = part.Title, Duration = part.Duration,
                 Segments = resized ? WatchSegments.Normalize(match.Segments, part.Duration) : match.Segments,
                 Position = resized ? Math.Min(match.Position, part.Duration) : match.Position
-            });
+            }));
         }
-        var retired = pool.Where(episode => episode.HasActivity || episode.IsManual).TakeLast(RetiredLimit).ToArray();
+        var retired = pool.Where(episode => episode.HasActivity).TakeLast(RetiredLimit).ToArray();
         if (existing is { PartsKnown: true } && existing.Title == info.Title && SameParts(existing.Episodes, episodes) && existing.Retired.Count == retired.Length) return;
         if (existing is not null && existing.Episodes.Count > 0 && retired.Length > existing.Retired.Count)
             AppLog.Info("Progress", $"{info.Bvid} 的分集有替换，{retired.Length - existing.Retired.Count} 条旧进度已归档。");
@@ -109,10 +116,10 @@ public sealed class WatchProgressService
             if (!ReferenceEquals(updated.Segments, episode.Segments) || updated.Position != episode.Position)
             {
                 var now = _clock.GetLocalNow();
-                completed = updated.Mark == ProgressMark.Auto && updated.CompletedAt is null && updated.Coverage >= CompletionRatio;
+                updated = Judge(updated);
+                completed = episode.CompletedAt is null && updated.CompletedAt is not null;
                 if (completed)
                 {
-                    updated = updated with { CompletedAt = now };
                     AppLog.Info("Progress", $"{identity.Bvid} P{updated.Part} 已看 {updated.Coverage:P0}，自动标记完成。");
                 }
                 Replace(identity.Bvid, [updated with { UpdatedAt = now }], now);
@@ -152,19 +159,12 @@ public sealed class WatchProgressService
         Edit("修改续播位置", bvid, [cid], episode => episode with
         { Position = Math.Round(Math.Clamp(position, 0, episode.Duration > 0 ? episode.Duration : double.MaxValue), 1) });
 
-    public bool SetMark(string bvid, long cid, ProgressMark mark) =>
-        Edit(mark switch { ProgressMark.Completed => "标记完成", ProgressMark.NotCompleted => "标记未完成", _ => "恢复自动判定" },
-            bvid, [cid], episode => mark == ProgressMark.Auto ? Judge(episode with { Mark = mark }) : episode with { Mark = mark });
-
-    public bool ResetEpisode(string bvid, long cid) => Edit("重置本集", bvid, [cid], Cleared);
-
-    /// <summary>Marks every part before <paramref name="part"/> as completed, for progress made before it was tracked.</summary>
+    /// <summary>Fills watched spans before <paramref name="part"/>, for progress made before it was tracked.</summary>
     public bool CompleteBefore(string bvid, int part) =>
-        Edit($"P{part} 之前全部标记完成", bvid, Parts(bvid, episode => episode.Part < part && episode.Status != EpisodeStatus.Completed),
-            episode => episode with { Mark = ProgressMark.Completed });
+        Edit($"P{part} 之前全部已看", bvid, Parts(bvid, episode => episode.Duration > 0 && episode.Part < part && episode.Status != EpisodeStatus.Completed), FullyWatched);
 
     public bool CompleteAll(string bvid) =>
-        Edit("整张地图标记完成", bvid, Parts(bvid, episode => episode.Status != EpisodeStatus.Completed), episode => episode with { Mark = ProgressMark.Completed });
+        Edit("整张地图已看", bvid, Parts(bvid, episode => episode.Duration > 0 && episode.Status != EpisodeStatus.Completed), FullyWatched);
 
     public bool ResetVideo(string bvid) => Edit("重置整张地图", bvid, Parts(bvid, _ => true), Cleared);
 
@@ -193,9 +193,12 @@ public sealed class WatchProgressService
         Get(bvid)?.Episodes.Where(filter).Select(episode => episode.Cid).ToArray() ?? [];
 
     private static EpisodeProgress Cleared(EpisodeProgress episode) =>
-        episode with { Segments = [], Position = 0, Mark = ProgressMark.Auto, CompletedAt = null };
+        episode with { Segments = [], Position = 0, CompletedAt = null };
 
-    // After a manual change to the spans the latch follows the coverage in both directions.
+    private EpisodeProgress FullyWatched(EpisodeProgress episode) =>
+        Judge(episode with { Segments = [new(0, episode.Duration)] });
+
+    // Completion always follows watched coverage, including edits and duration changes.
     private EpisodeProgress Judge(EpisodeProgress episode) =>
         episode with { CompletedAt = episode.Coverage >= CompletionRatio ? episode.CompletedAt ?? _clock.GetLocalNow() : null };
 
